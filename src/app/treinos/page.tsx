@@ -74,8 +74,8 @@ const MOCK_ATHLETES: Athlete[] = [
 
 export default function TrainingsPage() {
   const { isAdmin } = useAuth();
-  const [trainings, setTrainings] = useState<Training[]>(MOCK_TRAININGS);
-  const [athletes, setAthletes] = useState<Athlete[]>(MOCK_ATHLETES);
+  const [trainings, setTrainings] = useState<Training[]>([]);
+  const [athletes, setAthletes] = useState<Athlete[]>([]);
   const [loading, setLoading] = useState(true);
 
   // New Training Form
@@ -117,21 +117,21 @@ export default function TrainingsPage() {
 
       if (trainingError || athleteError) throw trainingError || athleteError;
 
-      if (trainingData && trainingData.length > 0) {
+      if (trainingData) {
         setTrainings(trainingData as Training[]);
       } else {
-        setTrainings(MOCK_TRAININGS);
+        setTrainings([]);
       }
 
-      if (athleteData && athleteData.length > 0) {
+      if (athleteData) {
         setAthletes(athleteData as Athlete[]);
       } else {
-        setAthletes(MOCK_ATHLETES);
+        setAthletes([]);
       }
     } catch (err) {
-      console.warn('Erro ao buscar dados do Supabase para treinos, usando dados locais:', err);
-      setTrainings(MOCK_TRAININGS);
-      setAthletes(MOCK_ATHLETES);
+      console.warn('Erro ao buscar dados do Supabase para treinos:', err);
+      setTrainings([]);
+      setAthletes([]);
     } finally {
       setLoading(false);
     }

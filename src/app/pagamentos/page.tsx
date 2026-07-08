@@ -56,8 +56,8 @@ const MOCK_PAYMENTS: Payment[] = [
 export default function PaymentsPage() {
   const router = useRouter();
   const { isAdmin } = useAuth();
-  const [payments, setPayments] = useState<Payment[]>(MOCK_PAYMENTS);
-  const [athletes, setAthletes] = useState<Athlete[]>(MOCK_ATHLETES);
+  const [payments, setPayments] = useState<Payment[]>([]);
+  const [athletes, setAthletes] = useState<Athlete[]>([]);
   const [loading, setLoading] = useState(true);
   
   // Search & Filters
@@ -105,10 +105,10 @@ export default function PaymentsPage() {
 
       if (athletesError || paymentsError) throw athletesError || paymentsError;
 
-      if (athletesData && athletesData.length > 0) {
+      if (athletesData) {
         setAthletes(athletesData as Athlete[]);
       } else {
-        setAthletes(MOCK_ATHLETES);
+        setAthletes([]);
       }
 
       if (paymentsData && paymentsData.length > 0) {
@@ -134,12 +134,12 @@ export default function PaymentsPage() {
         }));
         setPayments(formatted);
       } else {
-        setPayments(MOCK_PAYMENTS);
+        setPayments([]);
       }
     } catch (err) {
-      console.warn('Erro ao buscar dados de pagamentos no Supabase, usando mocks:', err);
-      setPayments(MOCK_PAYMENTS);
-      setAthletes(MOCK_ATHLETES);
+      console.warn('Erro ao buscar dados de pagamentos no Supabase:', err);
+      setPayments([]);
+      setAthletes([]);
     } finally {
       setLoading(false);
     }

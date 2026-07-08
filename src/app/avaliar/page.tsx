@@ -24,7 +24,7 @@ const MOCK_ATHLETES: Athlete[] = [
 export default function EvaluationsPage() {
   const router = useRouter();
   const { isAdmin, user } = useAuth();
-  const [athletes, setAthletes] = useState<Athlete[]>(MOCK_ATHLETES);
+  const [athletes, setAthletes] = useState<Athlete[]>([]);
   const [selectedAthleteId, setSelectedAthleteId] = useState<string>('');
   const [loading, setLoading] = useState(true);
 
@@ -55,13 +55,13 @@ export default function EvaluationsPage() {
         setAthletes(data as Athlete[]);
         setSelectedAthleteId(data[0].id);
       } else {
-        setAthletes(MOCK_ATHLETES);
-        setSelectedAthleteId(MOCK_ATHLETES[0].id);
+        setAthletes([]);
+        setSelectedAthleteId('');
       }
     } catch (err) {
-      console.warn('Erro ao buscar atletas do Supabase, usando locais:', err);
-      setAthletes(MOCK_ATHLETES);
-      setSelectedAthleteId(MOCK_ATHLETES[0].id);
+      console.warn('Erro ao buscar atletas do Supabase:', err);
+      setAthletes([]);
+      setSelectedAthleteId('');
     } finally {
       setLoading(false);
     }

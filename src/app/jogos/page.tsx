@@ -138,8 +138,8 @@ const FORMATIONS = {
 
 export default function GamesPage() {
   const { isAdmin } = useAuth();
-  const [games, setGames] = useState<Game[]>(MOCK_GAMES);
-  const [athletes, setAthletes] = useState<Athlete[]>(MOCK_ATHLETES);
+  const [games, setGames] = useState<Game[]>([]);
+  const [athletes, setAthletes] = useState<Athlete[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Form states
@@ -184,21 +184,21 @@ export default function GamesPage() {
 
       if (gamesError || athletesError) throw gamesError || athletesError;
 
-      if (gamesData && gamesData.length > 0) {
+      if (gamesData) {
         setGames(gamesData as Game[]);
       } else {
-        setGames(MOCK_GAMES);
+        setGames([]);
       }
 
-      if (athletesData && athletesData.length > 0) {
+      if (athletesData) {
         setAthletes(athletesData as Athlete[]);
       } else {
-        setAthletes(MOCK_ATHLETES);
+        setAthletes([]);
       }
     } catch (err) {
-      console.warn('Erro ao buscar dados de jogos do Supabase, usando dados locais:', err);
-      setGames(MOCK_GAMES);
-      setAthletes(MOCK_ATHLETES);
+      console.warn('Erro ao buscar dados de jogos do Supabase:', err);
+      setGames([]);
+      setAthletes([]);
     } finally {
       setLoading(false);
     }

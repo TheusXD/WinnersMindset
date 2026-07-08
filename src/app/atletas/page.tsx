@@ -116,7 +116,7 @@ const MOCK_ATHLETES: Athlete[] = [
 
 export default function AthletesPage() {
   const { isAdmin } = useAuth();
-  const [athletes, setAthletes] = useState<Athlete[]>(MOCK_ATHLETES);
+  const [athletes, setAthletes] = useState<Athlete[]>([]);
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('Todos');
   const [statusFilter, setStatusFilter] = useState<string>('Todos');
@@ -151,14 +151,14 @@ export default function AthletesPage() {
 
       if (error) throw error;
 
-      if (data && data.length > 0) {
+      if (data) {
         setAthletes(data as Athlete[]);
       } else {
-        setAthletes(MOCK_ATHLETES);
+        setAthletes([]);
       }
     } catch (err) {
-      console.warn('Erro ao buscar atletas do Supabase, utilizando dados locais:', err);
-      setAthletes(MOCK_ATHLETES);
+      console.warn('Erro ao buscar atletas do Supabase:', err);
+      setAthletes([]);
     } finally {
       setLoading(false);
     }
