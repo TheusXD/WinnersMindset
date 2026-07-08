@@ -1,0 +1,107 @@
+version: "2"
+type: frontend
+tech_stack:
+  - TypeScript
+  - Next.js
+  - React
+  - Tailwind CSS, Supabase, Lucide React, Recharts
+routes:
+  - path: /
+    file: src/app/page.tsx
+    auth_required: false
+    description: Dashboard page showing sports management metrics, upcoming activity details, quick navigation cards, and squad evolution summaries.
+  - path: /atletas
+    file: src/app/atletas/page.tsx
+    auth_required: false
+    description: Roster management page for Sub-15 and Sub-17 categories, allowing name search, filtering by status, and adding new athletes.
+  - path: /atletas/[id]
+    file: src/app/atletas/[id]/page.tsx
+    auth_required: false
+    description: Profile page for a specific athlete containing personal details, physical characteristics, performance history, status update tools, and metrics charts.
+  - path: /avaliar
+    file: src/app/avaliar/page.tsx
+    auth_required: false
+    description: Evaluation sheet page where coaches rate athlete technical, tactical, physical, and behavioral metrics.
+  - path: /treinos
+    file: src/app/treinos/page.tsx
+    auth_required: false
+    description: Training planning page with scheduling features, athlete list check-in/attendance tracking, and session feedback.
+  - path: /jogos
+    file: src/app/jogos/page.tsx
+    auth_required: false
+    description: Match management page showing scheduled/completed games, opponent details, tactical board, and match stats.
+features:
+  - name: Dashboard Overview
+    description: Displays primary KPIs like total athletes, medical status, scheduled sessions, and quick navigation menu.
+    files:
+      - src/app/page.tsx
+      - src/components/layout/Header.tsx
+      - src/components/layout/BottomNav.tsx
+    entry_route: /
+    user_interactions:
+      - View the metrics dashboard cards
+      - Click on quick-action menu items to go to evaluate, roster, training, or matches
+      - Read upcoming training/match details card and click "Gerenciar"
+    api_calls: []
+    auth_required: false
+  - name: Squad Roster and Registration
+    description: List, filter, search, and add new athletes to the academy roster.
+    files:
+      - src/app/atletas/page.tsx
+    entry_route: /atletas
+    user_interactions:
+      - Type search terms in the search bar
+      - Filter roster by category or status
+      - Click "Novo Atleta" button to open registration modal
+      - Fill athlete registration form and click save
+      - Click an athlete card to view their profile details
+    api_calls: []
+    auth_required: false
+  - name: Athlete Profile and Status
+    description: Detailed athlete specs including metrics logs, status adjustment, and visual evolution graphs.
+    files:
+      - src/app/atletas/[id]/page.tsx
+    entry_route: /atletas/[id]
+    user_interactions:
+      - View detailed physical statistics and contact information
+      - Select a new status from the status dropdown menu
+      - View historical progress logs
+    api_calls: []
+    auth_required: false
+  - name: Athlete Evaluative Scoring
+    description: Evaluate technical, tactical, physical, and behavioral scores for an athlete.
+    files:
+      - src/app/avaliar/page.tsx
+    entry_route: /avaliar
+    user_interactions:
+      - Select age category filter
+      - Select an athlete from the roster dropdown
+      - Use sliders to set grades (1-10) for technical, tactical, physical, and behavioral criteria
+      - Add evaluation comments in text area
+      - Click "Salvar Avaliação" to store performance results
+    api_calls: []
+    auth_required: false
+  - name: Training Schedule and Attendance
+    description: Schedule new training sessions and take athlete attendance checklist.
+    files:
+      - src/app/treinos/page.tsx
+    entry_route: /treinos
+    user_interactions:
+      - Browse upcoming and past trainings list
+      - Click "Novo Treino" to open training creator modal
+      - Fill training metadata and submit
+      - Click on a training card to open details and toggle attendance checkmarks for each player
+    api_calls: []
+    auth_required: false
+  - name: Match and Tactical Control
+    description: Schedule matches, update outcomes/scores, and adjust tactical lineup positions.
+    files:
+      - src/app/jogos/page.tsx
+    entry_route: /jogos
+    user_interactions:
+      - Review match schedules and scores
+      - Click "Novo Jogo" to open match registration form
+      - Click on a match to view stats details, lineup chalkboard, and update game status
+    api_calls: []
+    auth_required: false
+known_limitations: []

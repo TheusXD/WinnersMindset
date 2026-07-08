@@ -1,0 +1,704 @@
+[
+  {
+    "id": "TC001",
+    "title": "Complete and save an athlete evaluation",
+    "description": "This test verifies that a coach can select an athlete, complete all evaluation dimensions and comments, and save the evaluation successfully.",
+    "category": "evaluation form save/prevent-save behavior",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /avaliar"
+      },
+      {
+        "type": "action",
+        "description": "Select an age category"
+      },
+      {
+        "type": "action",
+        "description": "Select an athlete"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the technical score field with a valid value"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the tactical score field with a valid value"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the physical score field with a valid value"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the behavioral score field with a valid value"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the comments field with evaluation notes"
+      },
+      {
+        "type": "action",
+        "description": "Save the evaluation"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the evaluation is saved"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the completed evaluation is visible"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC002",
+    "title": "Update an athlete status from the profile",
+    "description": "This test verifies that a user can change an athlete's status from the profile and see the updated status take effect.",
+    "category": "Athlete Profile and Status",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /atletas"
+      },
+      {
+        "type": "action",
+        "description": "Open an athlete from the roster"
+      },
+      {
+        "type": "action",
+        "description": "Select a new status for the athlete"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the updated status is displayed in the profile"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the status change controls remain available"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC003",
+    "title": "Search and filter the roster to find athletes",
+    "description": "This test verifies that a user can narrow the roster with search and filters and see the list update accordingly.",
+    "category": "Squad Roster and Registration",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /atletas"
+      },
+      {
+        "type": "action",
+        "description": "Type a valid athlete name fragment into the search field"
+      },
+      {
+        "type": "action",
+        "description": "Select a category filter"
+      },
+      {
+        "type": "action",
+        "description": "Select a status filter"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the roster list is narrowed to matching athletes"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the selected filters are reflected in the roster view"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC004",
+    "title": "Create a training session and mark attendance",
+    "description": "This test verifies that a user can create a training session and mark athlete attendance from the session detail view.",
+    "category": "training session creation and attendance marking",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /treinos"
+      },
+      {
+        "type": "action",
+        "description": "Open the training session creation flow"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the required session details with valid values"
+      },
+      {
+        "type": "action",
+        "description": "Save the training session"
+      },
+      {
+        "type": "action",
+        "description": "Open the created training session details"
+      },
+      {
+        "type": "action",
+        "description": "Mark attendance for at least one athlete"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the session details are displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify attendance is recorded in the session view"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC005",
+    "title": "Open core areas from the dashboard and return",
+    "description": "This verifies that a user can start from the dashboard, jump into a core workflow area, and return to the dashboard through navigation.",
+    "category": "Dashboard overview and navigation to core areas",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Open the roster area from the dashboard"
+      },
+      {
+        "type": "action",
+        "description": "Return to the dashboard through navigation"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the dashboard is displayed again"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify core navigation options are available"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC006",
+    "title": "Create a match and update match status",
+    "description": "This test verifies that a user can create a match, open its details, and change the game status while viewing the tactical information.",
+    "category": "match creation and match status/tactical updates",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /jogos"
+      },
+      {
+        "type": "action",
+        "description": "Open the match creation flow"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the required match details with valid values"
+      },
+      {
+        "type": "action",
+        "description": "Save the match"
+      },
+      {
+        "type": "action",
+        "description": "Open the created match details"
+      },
+      {
+        "type": "action",
+        "description": "Update the match status"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the match details are displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify tactical board or match stats are visible"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC007",
+    "title": "View dashboard overview and open a core area",
+    "description": "This test verifies that a user can review the main dashboard metrics and use a quick action to reach a core management area.",
+    "category": "Dashboard Overview",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Scroll to the dashboard metrics and upcoming activity area"
+      },
+      {
+        "type": "action",
+        "description": "Open a quick action for a core management area"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the destination area is displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify dashboard metrics are still accessible in the interface"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC008",
+    "title": "Create a training session",
+    "description": "This verifies that a user can open the training creator, enter session details, submit them, and see the new session in the training list.",
+    "category": "Training Schedule and Attendance",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /treinos"
+      },
+      {
+        "type": "action",
+        "description": "Open the new training flow"
+      },
+      {
+        "type": "action",
+        "description": "Enter valid training details"
+      },
+      {
+        "type": "action",
+        "description": "Submit the session"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the new training session appears in the list"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the session is available to open from the list"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC009",
+    "title": "Open an athlete profile from the roster",
+    "description": "This test verifies that a user can open a roster entry and reach the athlete profile page with detailed information.",
+    "category": "Athlete Profile and Status",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /atletas"
+      },
+      {
+        "type": "action",
+        "description": "Open an athlete from the roster"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the athlete profile is displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify personal and physical details are visible"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC010",
+    "title": "Create a match",
+    "description": "This verifies that a user can open the match creator, enter match details, submit them, and see the new match in the match list.",
+    "category": "Match and Tactical Control",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /jogos"
+      },
+      {
+        "type": "action",
+        "description": "Open the new match flow"
+      },
+      {
+        "type": "action",
+        "description": "Enter valid match details"
+      },
+      {
+        "type": "action",
+        "description": "Submit the match"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the new match appears in the match list"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the match is available to open from the list"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC011",
+    "title": "Mark athlete attendance in a training session",
+    "description": "This verifies that a user can open a training session, review the participant list, and update attendance status for athletes.",
+    "category": "Training Schedule and Attendance",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /treinos"
+      },
+      {
+        "type": "action",
+        "description": "Open a training session from the list"
+      },
+      {
+        "type": "action",
+        "description": "Review the participant list"
+      },
+      {
+        "type": "action",
+        "description": "Toggle attendance for an athlete"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the athlete attendance status updates in the session details"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the updated attendance state remains visible"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC012",
+    "title": "Prevent saving an incomplete evaluation",
+    "description": "This test verifies that the evaluation form does not save when required score dimensions are missing and that validation is shown.",
+    "category": "evaluation form save/prevent-save behavior",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /avaliar"
+      },
+      {
+        "type": "action",
+        "description": "Select an age category"
+      },
+      {
+        "type": "action",
+        "description": "Select an athlete"
+      },
+      {
+        "type": "action",
+        "description": "Fill in only part of the required score fields"
+      },
+      {
+        "type": "action",
+        "description": "Attempt to save the evaluation"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify a validation error is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the evaluation is not saved"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC013",
+    "title": "Update match status from match details",
+    "description": "This verifies that a user can open a match, review tactical information and stats, and change the match status from the detail view.",
+    "category": "Match and Tactical Control",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /jogos"
+      },
+      {
+        "type": "action",
+        "description": "Open a match from the list"
+      },
+      {
+        "type": "action",
+        "description": "Review the match stats and tactical board"
+      },
+      {
+        "type": "action",
+        "description": "Update the match status"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the match status updates in the detail view"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the tactical and stats sections remain visible"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC014",
+    "title": "Open highlighted activity from the dashboard",
+    "description": "This test verifies that a user can read the upcoming activity summary from the dashboard and open the highlighted activity for management.",
+    "category": "Dashboard Overview",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /"
+      },
+      {
+        "type": "action",
+        "description": "Scroll to the upcoming activity summary"
+      },
+      {
+        "type": "action",
+        "description": "Open the management action for the highlighted activity"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the selected activity management view is displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the activity details are visible"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC015",
+    "title": "Register a new athlete and open the profile",
+    "description": "This test verifies that a user can add a new athlete through the roster flow and then access the newly created profile.",
+    "category": "Squad Roster and Registration",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /atletas"
+      },
+      {
+        "type": "action",
+        "description": "Open the new athlete registration flow"
+      },
+      {
+        "type": "action",
+        "description": "Fill in the athlete registration form with valid details"
+      },
+      {
+        "type": "action",
+        "description": "Save the new athlete"
+      },
+      {
+        "type": "action",
+        "description": "Open the newly created athlete from the roster"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the new athlete profile is displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the roster now includes the new athlete"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC016",
+    "title": "Review the training list and open a session detail",
+    "description": "This test verifies that a user can browse training sessions and open an individual session for details and feedback.",
+    "category": "training session creation and attendance marking",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /treinos"
+      },
+      {
+        "type": "action",
+        "description": "Scroll through the training list"
+      },
+      {
+        "type": "action",
+        "description": "Open a session from the list"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the session detail view is displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify session feedback or attendance information is visible"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC017",
+    "title": "Review athlete performance history and charts",
+    "description": "This test verifies that a user can inspect an athlete profile and view performance charts together with progress history.",
+    "category": "Athlete Profile and Status",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /atletas"
+      },
+      {
+        "type": "action",
+        "description": "Open an athlete from the roster"
+      },
+      {
+        "type": "action",
+        "description": "Scroll to the performance section"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify performance charts are displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify progress history entries are visible"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC018",
+    "title": "Review match details, tactics, and stats",
+    "description": "This test verifies that a user can browse the match list, open a match, and inspect the tactical board and stats.",
+    "category": "match creation and match status/tactical updates",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /jogos"
+      },
+      {
+        "type": "action",
+        "description": "Scroll through the match list"
+      },
+      {
+        "type": "action",
+        "description": "Open a match from the list"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the match detail view is displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify match stats and tactical board are visible"
+      }
+    ],
+    "priority": "High"
+  },
+  {
+    "id": "TC019",
+    "title": "Filter athletes by age category before evaluating",
+    "description": "This verifies that selecting an age category narrows the athlete roster used for evaluation.",
+    "category": "Athlete Evaluative Scoring",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /avaliar"
+      },
+      {
+        "type": "action",
+        "description": "Select an athlete’s age category"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the athlete roster is filtered to the selected age category"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify athletes from other categories are not shown"
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC020",
+    "title": "Browse match list and open match details",
+    "description": "This verifies that a user can browse scheduled and completed matches and open one to inspect its details.",
+    "category": "Match and Tactical Control",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /jogos"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify matches are displayed"
+      },
+      {
+        "type": "action",
+        "description": "Open a match from the list"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the match detail view is displayed"
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC021",
+    "title": "Browse training sessions and open session details",
+    "description": "This verifies that a user can browse the training list and open an individual session to review its details.",
+    "category": "Training Schedule and Attendance",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /treinos"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify training sessions are displayed"
+      },
+      {
+        "type": "action",
+        "description": "Open a training session from the list"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the session detail view is displayed"
+      }
+    ],
+    "priority": "Medium"
+  },
+  {
+    "id": "TC022",
+    "title": "Show empty roster and list edge states",
+    "description": "This test verifies that the roster, training, or match list pages show an empty state when no items are available to display.",
+    "category": "Squad Roster and Registration",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to /atletas"
+      },
+      {
+        "type": "action",
+        "description": "Apply filters that result in no matching athletes"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify an empty state message is visible"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify no roster items are shown"
+      }
+    ],
+    "priority": "Low"
+  }
+]
