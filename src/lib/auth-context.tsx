@@ -58,7 +58,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           'treinador@legionarios.com',
           'professor@wm.com',
           'matheus_silva4412@hotmail.com',
-          'leandro.wm@hotmail.com'
+          'leandro.wm@hotmail.com',
+          'miura.sport@hotmail.com'
         ];
         const isUserAdmin = STRICT_ADMIN_EMAILS.includes(email);
         const fallbackProfile: Profile = {
@@ -91,7 +92,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       'treinador@legionarios.com',
       'professor@wm.com',
       'matheus_silva4412@hotmail.com',
-      'leandro.wm@hotmail.com'
+      'leandro.wm@hotmail.com',
+      'miura.sport@hotmail.com'
     ];
     const STRICT_TEST_STUDENTS = [
       'aluno_test@athle.com',
