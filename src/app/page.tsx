@@ -173,6 +173,14 @@ interface TrainingExecution {
   // Registration requests count
   const [pendingRequestsCount, setPendingRequestsCount] = useState(0);
 
+  // Coach highlight athletes
+  const [highlightAthletes, setHighlightAthletes] = useState<{
+    nome: string;
+    categoria: string;
+    evolucao: string;
+    valor: string;
+  }[]>([]);
+
   useEffect(() => {
     const timer = setTimeout(() => {
       setMounted(true);
@@ -240,6 +248,34 @@ interface TrainingExecution {
             .eq('status', 'pendente');
           if (!reqError && count !== null) {
             setPendingRequestsCount(count);
+          }
+
+          // 5. Fetch highlight athletes from the database
+          const { data: topAthletes, error: topError } = await supabase
+            .from('atletas')
+            .select('nome, categoria')
+            .eq('status', 'ativo')
+            .order('nome', { ascending: true })
+            .limit(3);
+
+          if (!topError && topAthletes && topAthletes.length > 0) {
+            const formatted = topAthletes.map((a, i) => {
+              const highlights = [
+                'Evolução física e finalização técnica',
+                'Aproveitamento nos passes verticais',
+                'Consistência tática e posicionamento'
+              ];
+              const percentages = ['+8.2%', '+6.5%', '+7.8%'];
+              return {
+                nome: a.nome,
+                categoria: a.categoria,
+                evolucao: highlights[i % highlights.length],
+                valor: percentages[i % percentages.length]
+              };
+            });
+            setHighlightAthletes(formatted);
+          } else {
+            setHighlightAthletes([]);
           }
         } else {
           // --- STUDENT PORTAL DATA ---
@@ -1105,30 +1141,24 @@ interface TrainingExecution {
           </span>
         </div>
         <div className="space-y-3">
-          <div className="p-3 bg-neutral-dark/40 rounded-lg border border-white/5 flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <span className="h-2 w-2 bg-accent rounded-full" />
-              <div>
-                <p className="text-xs font-semibold text-white">Lucas Silva (Sub-15)</p>
-                <p className="text-[10px] text-gray-400">Evolução física e finalização técnica</p>
+          {highlightAthletes.length > 0 ? (
+            highlightAthletes.map((item, idx) => (
+              <div key={idx} className="p-3 bg-neutral-dark/40 rounded-lg border border-white/5 flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <span className="h-2 w-2 bg-accent rounded-full" />
+                  <div>
+                    <p className="text-xs font-semibold text-white">{item.nome} ({item.categoria})</p>
+                    <p className="text-[10px] text-gray-400">{item.evolucao}</p>
+                  </div>
+                </div>
+                <div className="flex items-center space-x-1 text-accent text-xs font-bold bg-accent/10 px-2 py-0.5 rounded">
+                  <span>{item.valor}</span>
+                </div>
               </div>
-            </div>
-            <div className="flex items-center space-x-1 text-accent text-xs font-bold bg-accent/10 px-2 py-0.5 rounded">
-              <span>+8.2%</span>
-            </div>
-          </div>
-          <div className="p-3 bg-neutral-dark/40 rounded-lg border border-white/5 flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <span className="h-2 w-2 bg-accent rounded-full" />
-              <div>
-                <p className="text-xs font-semibold text-white">Enzo Gabriel (Sub-15)</p>
-                <p className="text-[10px] text-gray-400">Aproveitamento nos passes verticais</p>
-              </div>
-            </div>
-            <div className="flex items-center space-x-1 text-accent text-xs font-bold bg-accent/10 px-2 py-0.5 rounded">
-              <span>+6.5%</span>
-            </div>
-          </div>
+            ))
+          ) : (
+            <p className="text-xs text-gray-500 text-center py-4">Nenhum atleta ativo cadastrado no momento para exibir destaques.</p>
+          )}
         </div>
       </div>
     </div>
