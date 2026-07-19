@@ -25,7 +25,11 @@ import {
   X,
   File,
   FileImage,
-  AlertCircle
+  AlertCircle,
+  Dumbbell,
+  Trash2,
+  Lock,
+  Check
 } from 'lucide-react';
 import {
   Radar,
@@ -89,6 +93,36 @@ interface PersonalizedTraining {
   data_hora: string;
   arquivo_url?: string | null;
   arquivo_tipo?: string | null;
+}
+
+interface WeeklyTrainingPlan {
+  id: string;
+  atleta_id: string;
+  treinador_id: string | null;
+  titulo: string;
+  data_inicio: string;
+  data_fim: string;
+  ativo: boolean;
+  created_at: string;
+}
+
+interface WeeklyTrainingPlanDay {
+  id: string;
+  plano_id: string;
+  dia_semana: 'segunda' | 'terca' | 'quarta' | 'quinta' | 'sexta';
+  exercicios: string;
+  created_at: string;
+}
+
+interface TrainingExecution {
+  id: string;
+  plano_id: string;
+  plano_dia_id: string;
+  atleta_id: string;
+  data: string;
+  concluido: boolean;
+  concluido_em: string | null;
+  created_at: string;
 }
 
 const DEFAULT_ATHLETE: Athlete = {
@@ -159,6 +193,32 @@ export default function AthleteDetailPage() {
     arquivo_url: '' as string,
     arquivo_tipo: '' as string,
   });
+
+  // Weekly Training Plan States
+  const [weeklyPlan, setWeeklyPlan] = useState<WeeklyTrainingPlan | null>(null);
+  const [planDays, setPlanDays] = useState<WeeklyTrainingPlanDay[]>([]);
+  const [executions, setExecutions] = useState<TrainingExecution[]>([]);
+  const [isCreatingPlan, setIsCreatingPlan] = useState(false);
+  const [isEditingPlanPeriod, setIsEditingPlanPeriod] = useState(false);
+  const [isEditingDayExercises, setIsEditingDayExercises] = useState<string | null>(null);
+
+  const [planForm, setPlanForm] = useState({
+    titulo: 'Plano de Treino Semanal',
+    data_inicio: new Date().toISOString().split('T')[0],
+    data_fim: new Date(Date.now() + 28 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    segunda: '',
+    terca: '',
+    quarta: '',
+    quinta: '',
+    sexta: '',
+  });
+
+  const [editPeriodForm, setEditPeriodForm] = useState({
+    data_inicio: '',
+    data_fim: '',
+  });
+
+  const [editExercisesText, setEditExercisesText] = useState('');
   const [savingTraining, setSavingTraining] = useState(false);
   const [uploadingFile, setUploadingFile] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -363,6 +423,211 @@ export default function AthleteDetailPage() {
     }
   };
 
+  // --- Weekly Training Plan Handlers ---
+  const getWeekdayDates = (startDateStr: string, endDateStr: string): string[] => {
+    const dates: string[] = [];
+    const current = new Date(startDateStr + 'T00:00:00');
+    const end = new Date(endDateStr + 'T00:00:00');
+    while (current <= end) {
+      const day = current.getDay();
+      if (day >= 1 && day <= 5) {
+        dates.push(current.toISOString().split('T')[0]);
+      }
+      current.setDate(current.getDate() + 1);
+    }
+    return dates;
+  };
+
+  const getWeekdayName = (dateStr: string): 'segunda' | 'terca' | 'quarta' | 'quinta' | 'sexta' => {
+    const day = new Date(dateStr + 'T00:00:00').getDay();
+    const mapping: Record<number, 'segunda' | 'terca' | 'quarta' | 'quinta' | 'sexta'> = {
+      1: 'segunda',
+      2: 'terca',
+      3: 'quarta',
+      4: 'quinta',
+      5: 'sexta',
+    };
+    return mapping[day] || 'segunda';
+  };
+
+  const handleCreateWeeklyPlan = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!planForm.data_inicio || !planForm.data_fim) return;
+    
+    setSavingTraining(true);
+    try {
+      if (weeklyPlan) {
+        await supabase
+          .from('planos_treino')
+          .update({ ativo: false })
+          .eq('id', weeklyPlan.id);
+      }
+
+      const { data: newPlan, error: planError } = await supabase
+        .from('planos_treino')
+        .insert([{
+          atleta_id: id,
+          treinador_id: user?.id || null,
+          titulo: planForm.titulo,
+          data_inicio: planForm.data_inicio,
+          data_fim: planForm.data_fim,
+          ativo: true
+        }])
+        .select()
+        .single();
+
+      if (planError || !newPlan) throw planError || new Error('Erro ao criar plano.');
+
+      const weekdays: ('segunda' | 'terca' | 'quarta' | 'quinta' | 'sexta')[] = ['segunda', 'terca', 'quarta', 'quinta', 'sexta'];
+      const daysPayload = weekdays.map(day => ({
+        plano_id: newPlan.id,
+        dia_semana: day,
+        exercicios: planForm[day] || 'Sem exercícios planejados para este dia.'
+      }));
+
+      const { data: createdDays, error: daysError } = await supabase
+        .from('plano_treino_dias')
+        .insert(daysPayload)
+        .select();
+
+      if (daysError || !createdDays) throw daysError || new Error('Erro ao criar dias do plano.');
+
+      const dates = getWeekdayDates(planForm.data_inicio, planForm.data_fim);
+      const execPayload = dates.map(dateStr => {
+        const weekday = getWeekdayName(dateStr);
+        const dayRecord = createdDays.find(d => d.dia_semana === weekday);
+        return {
+          plano_id: newPlan.id,
+          plano_dia_id: dayRecord?.id,
+          atleta_id: id,
+          data: dateStr,
+          concluido: false
+        };
+      }).filter(p => p.plano_dia_id);
+
+      if (execPayload.length > 0) {
+        const { error: execError } = await supabase
+          .from('treino_execucoes')
+          .insert(execPayload);
+        if (execError) throw execError;
+      }
+
+      setIsCreatingPlan(false);
+      window.location.reload();
+    } catch (err) {
+      console.error('Erro ao salvar plano de treino semanal:', err);
+      alert('Erro ao salvar o plano de treino. Tente novamente.');
+    } finally {
+      setSavingTraining(false);
+    }
+  };
+
+  const handleEditDayExercises = async (diaSemana: 'segunda' | 'terca' | 'quarta' | 'quinta' | 'sexta') => {
+    try {
+      const dayRecord = planDays.find(d => d.dia_semana === diaSemana);
+      if (!dayRecord || !weeklyPlan) return;
+
+      const { error } = await supabase
+        .from('plano_treino_dias')
+        .update({ exercicios: editExercisesText })
+        .eq('id', dayRecord.id);
+
+      if (error) throw error;
+
+      setPlanDays(prev => prev.map(d => d.dia_semana === diaSemana ? { ...d, exercicios: editExercisesText } : d));
+      setIsEditingDayExercises(null);
+    } catch (err) {
+      console.error('Erro ao atualizar exercícios:', err);
+      alert('Erro ao atualizar exercícios.');
+    }
+  };
+
+  const handleUpdatePeriod = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!weeklyPlan || !editPeriodForm.data_inicio || !editPeriodForm.data_fim) return;
+
+    setSavingTraining(true);
+    try {
+      const { error: updateError } = await supabase
+        .from('planos_treino')
+        .update({
+          data_inicio: editPeriodForm.data_inicio,
+          data_fim: editPeriodForm.data_fim
+        })
+        .eq('id', weeklyPlan.id);
+
+      if (updateError) throw updateError;
+
+      const newDates = getWeekdayDates(editPeriodForm.data_inicio, editPeriodForm.data_fim);
+
+      const { error: deleteError } = await supabase
+        .from('treino_execucoes')
+        .delete()
+        .eq('plano_id', weeklyPlan.id)
+        .eq('concluido', false)
+        .or(`data.lt.${editPeriodForm.data_inicio},data.gt.${editPeriodForm.data_fim}`);
+
+      if (deleteError) throw deleteError;
+
+      const { data: existingExecs, error: fetchError } = await supabase
+        .from('treino_execucoes')
+        .select('data')
+        .eq('plano_id', weeklyPlan.id);
+
+      if (fetchError) throw fetchError;
+
+      const existingDatesSet = new Set((existingExecs || []).map(e => e.data));
+
+      const toInsert = newDates.filter(dateStr => !existingDatesSet.has(dateStr)).map(dateStr => {
+        const weekday = getWeekdayName(dateStr);
+        const dayRecord = planDays.find(d => d.dia_semana === weekday);
+        return {
+          plano_id: weeklyPlan.id,
+          plano_dia_id: dayRecord?.id,
+          atleta_id: id,
+          data: dateStr,
+          concluido: false
+        };
+      }).filter(p => p.plano_dia_id);
+
+      if (toInsert.length > 0) {
+        const { error: insertError } = await supabase
+          .from('treino_execucoes')
+          .insert(toInsert);
+        if (insertError) throw insertError;
+      }
+
+      setIsEditingPlanPeriod(false);
+      window.location.reload();
+    } catch (err) {
+      console.error('Erro ao atualizar período do plano:', err);
+      alert('Erro ao atualizar o período.');
+    } finally {
+      setSavingTraining(false);
+    }
+  };
+
+  const handleEndWeeklyPlan = async () => {
+    if (!weeklyPlan) return;
+    if (!confirm('Deseja realmente encerrar este plano de treino semanal? Ele ficará inativo e guardará o histórico.')) return;
+
+    setSavingTraining(true);
+    try {
+      const { error } = await supabase
+        .from('planos_treino')
+        .update({ ativo: false })
+        .eq('id', weeklyPlan.id);
+
+      if (error) throw error;
+      window.location.reload();
+    } catch (err) {
+      console.error('Erro ao encerrar plano:', err);
+      alert('Erro ao encerrar o plano.');
+    } finally {
+      setSavingTraining(false);
+    }
+  };
+
   const [isEditing, setIsEditing] = useState(false);
   const [editAthlete, setEditAthlete] = useState({
     nome: '',
@@ -521,6 +786,41 @@ export default function AthleteDetailPage() {
           setPersonalizedTraining(trainingData);
         } else {
           setPersonalizedTraining(null);
+        }
+
+        // Fetch weekly training plan
+        const { data: planData, error: planError } = await supabase
+          .from('planos_treino')
+          .select('*')
+          .eq('atleta_id', id)
+          .eq('ativo', true)
+          .maybeSingle();
+
+        if (!planError && planData) {
+          setWeeklyPlan(planData);
+          setEditPeriodForm({
+            data_inicio: planData.data_inicio,
+            data_fim: planData.data_fim,
+          });
+
+          // Fetch plan days
+          const { data: daysData } = await supabase
+            .from('plano_treino_dias')
+            .select('*')
+            .eq('plano_id', planData.id);
+          setPlanDays(daysData || []);
+
+          // Fetch executions
+          const { data: execsData } = await supabase
+            .from('treino_execucoes')
+            .select('*')
+            .eq('plano_id', planData.id)
+            .order('data', { ascending: true });
+          setExecutions(execsData || []);
+        } else {
+          setWeeklyPlan(null);
+          setPlanDays([]);
+          setExecutions([]);
         }
       } catch (err) {
         console.warn('Erro ao buscar detalhes do atleta, usando dados locais:', err);
@@ -871,6 +1171,349 @@ export default function AthleteDetailPage() {
           </div>
         </div>
       )}
+
+      {/* Plano de Treino Semanal Card */}
+      <div className="glass-card p-6 space-y-6">
+        <div className="flex items-center justify-between border-b border-white/5 pb-3">
+          <h3 className="text-base font-bold text-white flex items-center">
+            <Dumbbell className="h-5 w-5 text-accent mr-2" />
+            Plano de Treino Semanal Personalizado
+          </h3>
+          {isAdmin && !weeklyPlan && !isCreatingPlan && (
+            <button
+              onClick={() => {
+                setPlanForm({
+                  titulo: 'Plano de Treino Semanal',
+                  data_inicio: new Date().toISOString().split('T')[0],
+                  data_fim: new Date(Date.now() + 28 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                  segunda: '',
+                  terca: '',
+                  quarta: '',
+                  quinta: '',
+                  sexta: '',
+                });
+                setIsCreatingPlan(true);
+              }}
+              className="inline-flex items-center justify-center rounded-lg bg-accent px-4 py-2 text-xs font-bold text-neutral-dark hover:bg-accent/90 transition-colors shadow-md"
+            >
+              Criar Plano de Treino
+            </button>
+          )}
+          {isAdmin && weeklyPlan && (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  setEditPeriodForm({
+                    data_inicio: weeklyPlan.data_inicio,
+                    data_fim: weeklyPlan.data_fim,
+                  });
+                  setIsEditingPlanPeriod(true);
+                }}
+                className="inline-flex items-center justify-center rounded-lg bg-primary border border-primary-light px-3 py-1.5 text-xs font-bold text-white hover:bg-primary/80 transition-colors"
+              >
+                Editar Período
+              </button>
+              <button
+                onClick={handleEndWeeklyPlan}
+                className="inline-flex items-center justify-center rounded-lg bg-red-500/10 border border-red-500/20 px-3 py-1.5 text-xs font-bold text-red-400 hover:bg-red-500/20 transition-colors"
+              >
+                Encerrar Plano
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* --- Form to Create Plan --- */}
+        {isCreatingPlan && (
+          <form onSubmit={handleCreateWeeklyPlan} className="space-y-4 bg-black/10 p-4 rounded-xl border border-white/5">
+            <h4 className="text-sm font-bold text-white">Criar Novo Plano</h4>
+            <div className="grid sm:grid-cols-3 gap-4">
+              <div className="sm:col-span-1">
+                <label className="block text-xs font-semibold text-gray-400 mb-1">Título do Plano</label>
+                <input
+                  type="text"
+                  required
+                  className="w-full glass-input text-xs"
+                  value={planForm.titulo}
+                  onChange={(e) => setPlanForm({ ...planForm, titulo: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-400 mb-1">Data Início</label>
+                <input
+                  type="date"
+                  required
+                  className="w-full glass-input text-xs"
+                  value={planForm.data_inicio}
+                  onChange={(e) => setPlanForm({ ...planForm, data_inicio: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-400 mb-1">Data Fim</label>
+                <input
+                  type="date"
+                  required
+                  className="w-full glass-input text-xs"
+                  value={planForm.data_fim}
+                  onChange={(e) => setPlanForm({ ...planForm, data_fim: e.target.value })}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-3 pt-2">
+              <h5 className="text-xs font-bold text-accent">Exercícios Diários (Segunda a Sexta) - Texto Livre</h5>
+              {[
+                { key: 'segunda', label: 'Segunda-feira' },
+                { key: 'terca', label: 'Terça-feira' },
+                { key: 'quarta', label: 'Quarta-feira' },
+                { key: 'quinta', label: 'Quinta-feira' },
+                { key: 'sexta', label: 'Sexta-feira' },
+              ].map((day) => (
+                <div key={day.key} className="space-y-1">
+                  <label className="block text-xs font-bold text-gray-300">{day.label}</label>
+                  <textarea
+                    rows={3}
+                    required
+                    placeholder={`Ex: 4 séries de 12 agachamentos. Corrida contínua 20 min. Observações...`}
+                    className="w-full glass-input text-xs"
+                    value={(planForm as any)[day.key]}
+                    onChange={(e) => setPlanForm({ ...planForm, [day.key]: e.target.value })}
+                  />
+                </div>
+              ))}
+            </div>
+
+            <div className="flex justify-end space-x-2 pt-3 border-t border-white/5">
+              <button
+                type="button"
+                onClick={() => setIsCreatingPlan(false)}
+                className="px-4 py-2 text-xs font-bold text-gray-300 hover:text-white"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                className="px-5 py-2 text-xs font-bold bg-accent text-neutral-dark rounded-lg hover:bg-accent/90 transition-colors"
+              >
+                Criar Plano
+              </button>
+            </div>
+          </form>
+        )}
+
+        {/* --- Form to Edit Period --- */}
+        {isEditingPlanPeriod && (
+          <form onSubmit={handleUpdatePeriod} className="space-y-4 bg-black/10 p-4 rounded-xl border border-white/5">
+            <h4 className="text-sm font-bold text-white">Editar Período do Plano</h4>
+            <div className="grid sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-400 mb-1">Data Início</label>
+                <input
+                  type="date"
+                  required
+                  className="w-full glass-input text-xs"
+                  value={editPeriodForm.data_inicio}
+                  onChange={(e) => setEditPeriodForm({ ...editPeriodForm, data_inicio: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-400 mb-1">Data Fim</label>
+                <input
+                  type="date"
+                  required
+                  className="w-full glass-input text-xs"
+                  value={editPeriodForm.data_fim}
+                  onChange={(e) => setEditPeriodForm({ ...editPeriodForm, data_fim: e.target.value })}
+                />
+              </div>
+            </div>
+            <div className="flex justify-end space-x-2 pt-3 border-t border-white/5">
+              <button
+                type="button"
+                onClick={() => setIsEditingPlanPeriod(false)}
+                className="px-4 py-2 text-xs font-bold text-gray-300 hover:text-white"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                className="px-5 py-2 text-xs font-bold bg-accent text-neutral-dark rounded-lg hover:bg-accent/90 transition-colors"
+              >
+                Atualizar Período
+              </button>
+            </div>
+          </form>
+        )}
+
+        {/* --- View Active Plan --- */}
+        {weeklyPlan ? (
+          <div className="space-y-6">
+            <div className="flex flex-wrap items-center justify-between gap-4 bg-primary/10 p-4 rounded-xl border border-white/5">
+              <div className="space-y-1">
+                <span className="text-[10px] text-gray-400 block font-semibold uppercase tracking-wider">Título do Plano</span>
+                <span className="text-sm font-bold text-white">{weeklyPlan.titulo}</span>
+              </div>
+              <div className="space-y-1">
+                <span className="text-[10px] text-gray-400 block font-semibold uppercase tracking-wider">Período</span>
+                <span className="text-xs text-gray-200 font-mono">
+                  {new Date(weeklyPlan.data_inicio + 'T00:00').toLocaleDateString('pt-BR')} até {new Date(weeklyPlan.data_fim + 'T00:00').toLocaleDateString('pt-BR')}
+                </span>
+              </div>
+              <div className="space-y-1">
+                <span className="text-[10px] text-gray-400 block font-semibold uppercase tracking-wider">Progresso do Elenco</span>
+                <span className="text-xs text-accent font-bold">
+                  {executions.filter(e => e.concluido).length} / {executions.length} treinos concluídos ({executions.length > 0 ? Math.round((executions.filter(e => e.concluido).length / executions.length) * 100) : 0}%)
+                </span>
+              </div>
+            </div>
+
+            {/* Progress Bar */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-gray-400">Progresso Geral</span>
+                <span className="font-bold text-white">
+                  {executions.length > 0 ? Math.round((executions.filter(e => e.concluido).length / executions.length) * 100) : 0}%
+                </span>
+              </div>
+              <div className="w-full h-2 bg-neutral-dark/65 rounded-full overflow-hidden border border-white/5">
+                <div 
+                  className="h-full bg-accent transition-all duration-500 rounded-full" 
+                  style={{ width: `${executions.length > 0 ? Math.round((executions.filter(e => e.concluido).length / executions.length) * 100) : 0}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Template Week Exercises */}
+            <div className="space-y-3">
+              <h4 className="text-xs font-bold text-gray-300 uppercase tracking-wider">Exercícios Planejados (Semana Padrão)</h4>
+              <div className="grid gap-3">
+                {[
+                  { key: 'segunda', label: 'Segunda-feira' },
+                  { key: 'terca', label: 'Terça-feira' },
+                  { key: 'quarta', label: 'Quarta-feira' },
+                  { key: 'quinta', label: 'Quinta-feira' },
+                  { key: 'sexta', label: 'Sexta-feira' },
+                ].map((day) => {
+                  const dayRecord = planDays.find(d => d.dia_semana === day.key);
+                  const isEditingThis = isEditingDayExercises === day.key;
+                  return (
+                    <div key={day.key} className="p-4 bg-neutral-dark/45 rounded-xl border border-white/5 space-y-2">
+                      <div className="flex items-center justify-between border-b border-white/5 pb-1">
+                        <span className="text-xs font-bold text-accent">{day.label}</span>
+                        {isAdmin && !isEditingThis && (
+                          <button
+                            onClick={() => {
+                              setEditExercisesText(dayRecord?.exercicios || '');
+                              setIsEditingDayExercises(day.key);
+                            }}
+                            className="text-[10px] text-gray-400 hover:text-accent font-bold flex items-center gap-1"
+                          >
+                            <Edit2 className="h-3 w-3" /> Editar
+                          </button>
+                        )}
+                      </div>
+                      {isEditingThis ? (
+                        <div className="space-y-2 pt-1">
+                          <textarea
+                            rows={3}
+                            className="w-full glass-input text-xs"
+                            value={editExercisesText}
+                            onChange={(e) => setEditExercisesText(e.target.value)}
+                          />
+                          <div className="flex justify-end space-x-2">
+                            <button
+                              onClick={() => setIsEditingDayExercises(null)}
+                              className="px-3 py-1 text-[10px] font-bold text-gray-300 hover:text-white"
+                            >
+                              Cancelar
+                            </button>
+                            <button
+                              onClick={() => handleEditDayExercises(day.key as any)}
+                              className="px-3 py-1 text-[10px] font-bold bg-accent text-neutral-dark rounded hover:bg-accent/90"
+                            >
+                              Salvar
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-xs text-gray-300 leading-relaxed whitespace-pre-wrap">
+                          {dayRecord?.exercicios || 'Nenhum exercício cadastrado para este dia.'}
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Executions Grid */}
+            <div className="space-y-3">
+              <h4 className="text-xs font-bold text-gray-300 uppercase tracking-wider">Histórico de Conclusão / Calendário</h4>
+              {executions.length === 0 ? (
+                <p className="text-xs text-gray-500">Nenhum dia gerado no período.</p>
+              ) : (
+                <div className="space-y-4">
+                  {/* Group into rows of 5 weekdays */}
+                  {Array.from({ length: Math.ceil(executions.length / 5) }).map((_, weekIndex) => {
+                    const weekExecs = executions.slice(weekIndex * 5, (weekIndex * 5) + 5);
+                    return (
+                      <div key={weekIndex} className="p-3 bg-neutral-dark/30 rounded-xl border border-white/5 space-y-2">
+                        <span className="text-[10px] text-gray-400 font-bold font-mono">Semana {weekIndex + 1}</span>
+                        <div className="grid grid-cols-5 gap-2">
+                          {weekExecs.map((exec) => {
+                            const dateObj = new Date(exec.data + 'T00:00:00');
+                            const dayInitials = getWeekdayName(exec.data).substring(0, 3).toUpperCase();
+                            const formattedDate = dateObj.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+                            const isToday = exec.data === new Date().getFullYear() + '-' + String(new Date().getMonth() + 1).padStart(2, '0') + '-' + String(new Date().getDate()).padStart(2, '0');
+                            const isFuture = exec.data > new Date().getFullYear() + '-' + String(new Date().getMonth() + 1).padStart(2, '0') + '-' + String(new Date().getDate()).padStart(2, '0');
+                            return (
+                              <div 
+                                key={exec.id} 
+                                className={`flex flex-col items-center p-2 rounded-lg border text-center transition-all ${
+                                  exec.concluido 
+                                    ? 'bg-accent/15 border-accent/35 text-accent' 
+                                    : isToday
+                                      ? 'bg-primary/25 border-primary-light text-white ring-1 ring-accent'
+                                      : isFuture
+                                        ? 'bg-neutral-dark/20 border-white/5 opacity-50 text-gray-600'
+                                        : 'bg-neutral-dark/40 border-white/10 text-gray-400'
+                                }`}
+                              >
+                                <span className="text-[9px] font-black">{dayInitials}</span>
+                                <span className="text-[10px] font-mono mt-0.5">{formattedDate}</span>
+                                <div className="mt-2">
+                                  {exec.concluido ? (
+                                    <Check className="h-3.5 w-3.5 mx-auto text-accent" />
+                                  ) : isFuture ? (
+                                    <Lock className="h-3 w-3 mx-auto text-gray-500" />
+                                  ) : (
+                                    <span className="block h-2 w-2 rounded-full bg-gray-500 mx-auto" />
+                                  )}
+                                </div>
+                                {exec.concluido && exec.concluido_em && (
+                                  <span className="text-[8px] text-accent/70 mt-1 block font-mono">
+                                    {new Date(exec.concluido_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          !isCreatingPlan && (
+            <div className="py-8 text-center text-xs text-gray-500 bg-neutral-dark/20 rounded-xl border border-dashed border-white/10">
+              Nenhum plano de treino semanal ativo no momento para este atleta.
+            </div>
+          )
+        )}
+      </div>
 
       {/* Treinamento Personalizado Card */}
       <div className="glass-card p-6 space-y-4">

@@ -22,7 +22,11 @@ import {
   MapPin,
   Clock,
   Loader2,
-  Video
+  Video,
+  Dumbbell,
+  Lock,
+  Check,
+  CheckCircle
 } from 'lucide-react';
 import {
   Radar,
@@ -124,11 +128,47 @@ interface StudentTraining {
   atleta_id: string;
 }
 
+interface WeeklyTrainingPlan {
+  id: string;
+  atleta_id: string;
+  treinador_id: string | null;
+  titulo: string;
+  data_inicio: string;
+  data_fim: string;
+  ativo: boolean;
+  created_at: string;
+}
+
+interface WeeklyTrainingPlanDay {
+  id: string;
+  plano_id: string;
+  dia_semana: 'segunda' | 'terca' | 'quarta' | 'quinta' | 'sexta';
+  exercicios: string;
+  created_at: string;
+}
+
+interface TrainingExecution {
+  id: string;
+  plano_id: string;
+  plano_dia_id: string;
+  atleta_id: string;
+  data: string;
+  concluido: boolean;
+  concluido_em: string | null;
+  created_at: string;
+}
+
   // Student States
   const [studentAthlete, setStudentAthlete] = useState<StudentAthlete | null>(null);
   const [studentPayments, setStudentPayments] = useState<StudentPayment[]>([]);
   const [studentEvaluations, setStudentEvaluations] = useState<StudentEvaluation[]>([]);
   const [studentTrainings, setStudentTrainings] = useState<StudentTraining[]>([]);
+
+  // Weekly Training Plan States
+  const [weeklyPlan, setWeeklyPlan] = useState<WeeklyTrainingPlan | null>(null);
+  const [planDays, setPlanDays] = useState<WeeklyTrainingPlanDay[]>([]);
+  const [executions, setExecutions] = useState<TrainingExecution[]>([]);
+  const [completingExecId, setCompletingExecId] = useState<string | null>(null);
 
   // Registration requests count
   const [pendingRequestsCount, setPendingRequestsCount] = useState(0);
@@ -333,6 +373,37 @@ interface StudentTraining {
               setStudentTrainings([]);
             }
           }
+
+          // Fetch weekly training plan
+          const { data: planData, error: planError } = await supabase
+            .from('planos_treino')
+            .select('*')
+            .eq('atleta_id', athleteId)
+            .eq('ativo', true)
+            .maybeSingle();
+
+          if (!planError && planData) {
+            setWeeklyPlan(planData);
+            
+            // Fetch template days
+            const { data: daysData } = await supabase
+              .from('plano_treino_dias')
+              .select('*')
+              .eq('plano_id', planData.id);
+            setPlanDays(daysData || []);
+
+            // Fetch executions
+            const { data: execsData } = await supabase
+              .from('treino_execucoes')
+              .select('*')
+              .eq('plano_id', planData.id)
+              .order('data', { ascending: true });
+            setExecutions(execsData || []);
+          } else {
+            setWeeklyPlan(null);
+            setPlanDays([]);
+            setExecutions([]);
+          }
         }
       } catch (err) {
         console.error('Erro ao carregar dados do Supabase:', err);
@@ -343,6 +414,42 @@ interface StudentTraining {
 
     fetchDashboardData();
   }, [isAdmin, profile]);
+
+  const handleToggleExecution = async (execId: string, currentStatus: boolean) => {
+    const exec = executions.find(e => e.id === execId);
+    if (!exec) return;
+
+    const todayStr = new Date().getFullYear() + '-' + String(new Date().getMonth() + 1).padStart(2, '0') + '-' + String(new Date().getDate()).padStart(2, '0');
+    if (exec.data > todayStr) {
+      alert('Não é possível marcar treinos de datas futuras!');
+      return;
+    }
+
+    setCompletingExecId(execId);
+    try {
+      const nextStatus = !currentStatus;
+      const { error } = await supabase
+        .from('treino_execucoes')
+        .update({
+          concluido: nextStatus,
+          concluido_em: nextStatus ? new Date().toISOString() : null,
+        })
+        .eq('id', execId);
+
+      if (error) throw error;
+
+      setExecutions(prev => prev.map(e => e.id === execId ? { 
+        ...e, 
+        concluido: nextStatus, 
+        concluido_em: nextStatus ? new Date().toISOString() : null 
+      } : e));
+    } catch (err) {
+      console.error('Erro ao atualizar check de treino:', err);
+      alert('Erro ao marcar treino concluído.');
+    } finally {
+      setCompletingExecId(null);
+    }
+  };
 
   if (loading) {
     return (
@@ -355,6 +462,45 @@ interface StudentTraining {
 
   // --- STUDENT VIEW PORTAL RENDER ---
   if (!isAdmin && studentAthlete) {
+    const todayLocal = new Date();
+    const todayStr = todayLocal.getFullYear() + '-' + String(todayLocal.getMonth() + 1).padStart(2, '0') + '-' + String(todayLocal.getDate()).padStart(2, '0');
+    const isActivePlan = weeklyPlan && weeklyPlan.ativo && todayStr >= weeklyPlan.data_inicio && todayStr <= weeklyPlan.data_fim;
+    const weekdayNum = todayLocal.getDay();
+    const isWeekend = weekdayNum === 0 || weekdayNum === 6;
+    
+    const weekdayMapping: Record<number, 'segunda' | 'terca' | 'quarta' | 'quinta' | 'sexta'> = {
+      1: 'segunda',
+      2: 'terca',
+      3: 'quarta',
+      4: 'quinta',
+      5: 'sexta'
+    };
+    const todayWeekdayName = weekdayMapping[weekdayNum];
+    
+    const todayExercises = isActivePlan && todayWeekdayName
+      ? planDays.find(d => d.dia_semana === todayWeekdayName)?.exercicios
+      : null;
+      
+    const todayExecution = isActivePlan 
+      ? executions.find(e => e.data === todayStr)
+      : null;
+      
+    const totalExecs = executions.length;
+    const completedExecs = executions.filter(e => e.concluido).length;
+    const progressPercent = totalExecs > 0 ? Math.round((completedExecs / totalExecs) * 100) : 0;
+
+    const getWeekdayName = (dateStr: string): 'segunda' | 'terca' | 'quarta' | 'quinta' | 'sexta' => {
+      const day = new Date(dateStr + 'T00:00:00').getDay();
+      const mapping: Record<number, 'segunda' | 'terca' | 'quarta' | 'quinta' | 'sexta'> = {
+        1: 'segunda',
+        2: 'terca',
+        3: 'quarta',
+        4: 'quinta',
+        5: 'sexta',
+      };
+      return mapping[day] || 'segunda';
+    };
+
     const nextPayment = studentPayments[0] || {
       tipo_plano: 'mensal',
       status: 'pendente',
@@ -453,6 +599,148 @@ interface StudentTraining {
               </div>
             </div>
           )}
+        </div>
+
+        {/* --- SISTEMA DE TREINAMENTO SEMANAL (ALUNO) --- */}
+        <div className="grid md:grid-cols-2 gap-6">
+          {/* Meu Treino de Hoje */}
+          <div className="glass-card p-6 space-y-4">
+            <h3 className="text-base font-bold text-white flex items-center border-b border-white/5 pb-2">
+              <Dumbbell className="h-5 w-5 text-accent mr-2" />
+              Meu Treino de Hoje
+            </h3>
+
+            {!weeklyPlan ? (
+              <div className="py-6 text-center text-xs text-gray-500 bg-neutral-dark/20 rounded-xl border border-dashed border-white/10">
+                Nenhum plano de treino semanal ativo no momento. Aguarde o planejamento do seu professor!
+              </div>
+            ) : isWeekend ? (
+              <div className="py-6 text-center text-xs text-gray-400 bg-neutral-dark/25 rounded-xl border border-white/5 space-y-2">
+                <Clock className="h-8 w-8 text-accent mx-auto animate-pulse" />
+                <p className="font-bold text-white">Fim de Semana &mdash; Descanso</p>
+                <p className="text-[11px] text-gray-500">Aproveite sábado e domingo para recuperar as energias!</p>
+              </div>
+            ) : !isActivePlan ? (
+              <div className="py-6 text-center text-xs text-gray-500 bg-neutral-dark/20 rounded-xl border border-dashed border-white/10">
+                Fora do período do plano de treino ativo ({new Date(weeklyPlan.data_inicio + 'T00:00').toLocaleDateString('pt-BR')} até {new Date(weeklyPlan.data_fim + 'T00:00').toLocaleDateString('pt-BR')}).
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="p-4 bg-neutral-dark/45 rounded-xl border border-white/5 space-y-2">
+                  <span className="text-[10px] text-accent font-bold uppercase tracking-wider block">
+                    Exercícios de {todayWeekdayName === 'segunda' ? 'Segunda-feira' : todayWeekdayName === 'terca' ? 'Terça-feira' : todayWeekdayName === 'quarta' ? 'Quarta-feira' : todayWeekdayName === 'quinta' ? 'Quinta-feira' : 'Sexta-feira'}
+                  </span>
+                  <p className="text-xs text-gray-200 leading-relaxed whitespace-pre-wrap">
+                    {todayExercises || 'Nenhum exercício planejado para hoje.'}
+                  </p>
+                </div>
+
+                {todayExecution && (
+                  <button
+                    onClick={() => handleToggleExecution(todayExecution.id, todayExecution.concluido)}
+                    disabled={completingExecId !== null}
+                    className={`w-full py-3.5 px-4 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 ${
+                      todayExecution.concluido
+                        ? 'bg-accent text-neutral-dark hover:bg-accent/90'
+                        : 'bg-neutral-dark border border-accent/30 text-accent hover:bg-accent/10'
+                    }`}
+                  >
+                    {completingExecId === todayExecution.id ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : todayExecution.concluido ? (
+                      <>
+                        <Check className="h-4 w-4 stroke-[3px]" />
+                        TREINO CONCLUÍDO! (Clique para desmarcar)
+                      </>
+                    ) : (
+                      <>
+                        <span className="block h-2 w-2 rounded-full bg-accent animate-ping" />
+                        MARQUEI QUE TREINEI HOJE!
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Meu Progresso Semanal */}
+          <div className="glass-card p-6 space-y-4">
+            <h3 className="text-base font-bold text-white flex items-center border-b border-white/5 pb-2">
+              <TrendingUp className="h-5 w-5 text-accent mr-2" />
+              Meu Progresso de Treino
+            </h3>
+
+            {weeklyPlan && totalExecs > 0 ? (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-gray-400">Progresso Geral do Período</span>
+                  <span className="font-bold text-accent">{completedExecs} / {totalExecs} Concluídos ({progressPercent}%)</span>
+                </div>
+                
+                {/* Progress Bar */}
+                <div className="w-full h-2.5 bg-neutral-dark/65 rounded-full overflow-hidden border border-white/5">
+                  <div 
+                    className="h-full bg-accent transition-all duration-500 rounded-full" 
+                    style={{ width: `${progressPercent}%` }}
+                  />
+                </div>
+
+                {/* Calendar grid */}
+                <div className="space-y-3 pt-2">
+                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Calendário de Checks</span>
+                  <div className="grid grid-cols-1 gap-2 max-h-48 overflow-y-auto pr-1">
+                    {Array.from({ length: Math.ceil(executions.length / 5) }).map((_, weekIndex) => {
+                      const weekExecs = executions.slice(weekIndex * 5, (weekIndex * 5) + 5);
+                      return (
+                        <div key={weekIndex} className="p-2 bg-neutral-dark/30 rounded-lg border border-white/5 flex items-center justify-between">
+                          <span className="text-[9px] text-gray-500 font-bold font-mono">Semana {weekIndex + 1}</span>
+                          <div className="flex gap-1.5">
+                            {weekExecs.map((exec) => {
+                              const dateObj = new Date(exec.data + 'T00:00:00');
+                              const dayInitName = getWeekdayName(exec.data).substring(0, 3).toUpperCase();
+                              const isToday = exec.data === todayStr;
+                              const isFuture = exec.data > todayStr;
+                              return (
+                                <button
+                                  key={exec.id}
+                                  disabled={isFuture || completingExecId !== null}
+                                  onClick={() => handleToggleExecution(exec.id, exec.concluido)}
+                                  title={`${dateObj.toLocaleDateString('pt-BR')} - ${exec.concluido ? 'Concluído' : isFuture ? 'Futuro (bloqueado)' : 'Pendente'}`}
+                                  className={`h-9 w-9 flex flex-col items-center justify-center rounded-lg border text-center transition-all ${
+                                    exec.concluido
+                                      ? 'bg-accent/15 border-accent/40 text-accent font-bold'
+                                      : isToday
+                                        ? 'bg-primary/20 border-primary-light text-white ring-1 ring-accent'
+                                        : isFuture
+                                          ? 'bg-neutral-dark/20 border-white/5 opacity-40 text-gray-600 cursor-not-allowed'
+                                          : 'bg-neutral-dark/40 border-white/10 text-gray-400 hover:bg-neutral-dark/60 hover:border-white/20'
+                                  }`}
+                                >
+                                  <span className="text-[7px] font-black">{dayInitName}</span>
+                                  {exec.concluido ? (
+                                    <Check className="h-3 w-3 mt-0.5" />
+                                  ) : isFuture ? (
+                                    <Lock className="h-2.5 w-2.5 mt-0.5 text-gray-600" />
+                                  ) : (
+                                    <span className="text-[7.5px] font-mono mt-0.5">{dateObj.getDate()}</span>
+                                  )}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="py-6 text-center text-xs text-gray-500 bg-neutral-dark/20 rounded-xl border border-dashed border-white/10">
+                Nenhum progresso disponível no momento.
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Training Schedule with YouTube embed */}
