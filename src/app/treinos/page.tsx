@@ -31,46 +31,7 @@ interface AttendanceState {
   justificativa: string;
 }
 
-const MOCK_TRAININGS: Training[] = [
-  {
-    id: 'b0011c99-9c0b-4ef8-bb6d-6bb9bd380a01',
-    titulo: 'Treino Tático - Posicionamento defensivo',
-    data_hora: '2026-06-06T14:00:00Z',
-    local: 'Campo Principal - Arena Winner\'s Mindset',
-    categoria: 'Sub-15',
-    foco: 'Tático',
-    status: 'agendado',
-    descricao: 'Sessão com foco em transição defensiva e basculação de linha de 4 zagueiros.',
-  },
-  {
-    id: 'b0011c99-9c0b-4ef8-bb6d-6bb9bd380a02',
-    titulo: 'Trabalho de Potência e Finalização',
-    data_hora: '2026-06-05T09:00:00Z',
-    local: 'Campo Auxiliar 1',
-    categoria: 'Sub-15',
-    foco: 'Técnico',
-    status: 'concluido',
-    descricao: 'Sessão concluída. Foco em chutes de média distância e cruzamentos na área.',
-  },
-  {
-    id: 'b0011c99-9c0b-4ef8-bb6d-6bb9bd380a03',
-    titulo: 'Treino Integrado Sub-17',
-    data_hora: '2026-06-07T08:30:00Z',
-    local: 'Campo Principal',
-    categoria: 'Sub-17',
-    foco: 'Coletivo',
-    status: 'agendado',
-    descricao: 'Jogo-treino para simulação tática do próximo confronto.',
-  },
-];
 
-const MOCK_ATHLETES: Athlete[] = [
-  { id: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11', nome: 'Lucas Silva', categoria: 'Sub-15', posicao: 'Centroavante' },
-  { id: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12', nome: 'Enzo Gabriel', categoria: 'Sub-15', posicao: 'Meia' },
-  { id: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a13', nome: 'Gabriel Santos', categoria: 'Sub-15', posicao: 'Zagueiro' },
-  { id: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a14', nome: 'Matheus Oliveira', categoria: 'Sub-15', posicao: 'Goleiro' },
-  { id: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a15', nome: 'Pedro Henrique', categoria: 'Sub-15', posicao: 'Ponta Direita' },
-];
 
 export default function TrainingsPage() {
   const { isAdmin } = useAuth();

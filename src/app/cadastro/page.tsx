@@ -135,8 +135,8 @@ export default function CadastroPage() {
 
       if (dbError) throw dbError;
 
-      // Redirect directly to login with parameter
-      router.push('/login?cadastrado=true');
+      // Show success screen (Step 4)
+      setStep(4);
     } catch (err) {
       console.error('Registration error:', err);
       const msg = (err as Error).message || '';

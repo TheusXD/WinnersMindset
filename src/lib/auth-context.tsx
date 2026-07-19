@@ -21,6 +21,17 @@ interface AuthContextType {
   clearGlobalAuthError: () => void;
 }
 
+const STRICT_ADMIN_EMAILS = [
+  'admin_test@athle.com',
+  'admin_test@legionarios.com',
+  'admin@legionarios.com',
+  'treinador@legionarios.com',
+  'professor@wm.com',
+  'matheus_silva4412@hotmail.com',
+  'leandro.wm@hotmail.com',
+  'miura.sport@hotmail.com'
+];
+
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -51,16 +62,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } else {
         // Fallback for mock/local testing: derive role from email prefix
         const email = currentUser.email || '';
-        const STRICT_ADMIN_EMAILS = [
-          'admin_test@athle.com',
-          'admin_test@legionarios.com',
-          'admin@legionarios.com',
-          'treinador@legionarios.com',
-          'professor@wm.com',
-          'matheus_silva4412@hotmail.com',
-          'leandro.wm@hotmail.com',
-          'miura.sport@hotmail.com'
-        ];
         const isUserAdmin = STRICT_ADMIN_EMAILS.includes(email);
         const fallbackProfile: Profile = {
           id: currentUser.id,
@@ -72,7 +73,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         };
         // Upsert into remote database so it exists for foreign key references (e.g. avaliacoes.treinador_id)
         try {
-          await supabase.from('perfis_usuarios').upsert([{ ...fallbackProfile, email }]);
+          const { error: upsertErr } = await supabase.from('perfis_usuarios').upsert([{ ...fallbackProfile, email }]);
+          if (upsertErr) {
+            console.error('Failed to upsert fallback profile to Supabase:', upsertErr.message);
+          }
         } catch (dbErr) {
           console.warn('Could not upsert profile fallback to Supabase:', dbErr);
         }
@@ -85,16 +89,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   async function isApproved(currentUser: User): Promise<boolean> {
     const email = currentUser.email || '';
-    const STRICT_ADMIN_EMAILS = [
-      'admin_test@athle.com',
-      'admin_test@legionarios.com',
-      'admin@legionarios.com',
-      'treinador@legionarios.com',
-      'professor@wm.com',
-      'matheus_silva4412@hotmail.com',
-      'leandro.wm@hotmail.com',
-      'miura.sport@hotmail.com'
-    ];
     const STRICT_TEST_STUDENTS = [
       'aluno_test@athle.com',
       'aluno_test@legionarios.com',

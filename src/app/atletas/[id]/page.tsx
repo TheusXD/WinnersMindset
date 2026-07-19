@@ -684,44 +684,46 @@ export default function AthleteDetailPage() {
       </div>
 
       {/* Ficha Cadastral card */}
-      <div className="glass-card p-6 grid sm:grid-cols-2 gap-6">
-        <div className="space-y-4">
-          <h3 className="text-base font-bold text-white flex items-center border-b border-white/5 pb-2">
-            <Phone className="h-5 w-5 text-accent mr-2" />
-            Informações de Contato
-          </h3>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <span className="block text-[10px] text-gray-400">Telefone Celular</span>
-              <span className="text-sm font-bold text-white">{athlete.telefone || 'Não informado'}</span>
+      {(isAdmin || user?.id === athlete.usuario_id) && (
+        <div className="glass-card p-6 grid sm:grid-cols-2 gap-6">
+          <div className="space-y-4">
+            <h3 className="text-base font-bold text-white flex items-center border-b border-white/5 pb-2">
+              <Phone className="h-5 w-5 text-accent mr-2" />
+              Informações de Contato
+            </h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <span className="block text-[10px] text-gray-400">Telefone Celular</span>
+                <span className="text-sm font-bold text-white">{athlete.telefone || 'Não informado'}</span>
+              </div>
+              <div>
+                <span className="block text-[10px] text-gray-400">Telefone do Responsável</span>
+                <span className="text-sm font-bold text-white">{athlete.telefone_responsavel || 'Não informado'}</span>
+              </div>
             </div>
             <div>
-              <span className="block text-[10px] text-gray-400">Telefone do Responsável</span>
-              <span className="text-sm font-bold text-white">{athlete.telefone_responsavel || 'Não informado'}</span>
+              <span className="block text-[10px] text-gray-400">Endereço Residencial</span>
+              <span className="text-sm font-bold text-white flex items-center gap-1.5 mt-0.5">
+                <MapPin className="h-3.5 w-3.5 text-accent/60" />
+                {athlete.endereco || 'Não informado'}
+              </span>
             </div>
           </div>
-          <div>
-            <span className="block text-[10px] text-gray-400">Endereço Residencial</span>
-            <span className="text-sm font-bold text-white flex items-center gap-1.5 mt-0.5">
-              <MapPin className="h-3.5 w-3.5 text-accent/60" />
-              {athlete.endereco || 'Não informado'}
-            </span>
-          </div>
-        </div>
 
-        <div className="space-y-4">
-          <h3 className="text-base font-bold text-white flex items-center border-b border-white/5 pb-2">
-            <Heart className="h-5 w-5 text-accent mr-2" />
-            Histórico Médico / Clínico
-          </h3>
-          <div>
-            <span className="block text-[10px] text-gray-400">Observações Clínicas e Alergias</span>
-            <p className="text-xs text-gray-300 mt-1.5 leading-relaxed bg-black/20 p-3 rounded-lg border border-white/5">
-              {athlete.historico_medico || 'Nenhum histórico médico registrado.'}
-            </p>
+          <div className="space-y-4">
+            <h3 className="text-base font-bold text-white flex items-center border-b border-white/5 pb-2">
+              <Heart className="h-5 w-5 text-accent mr-2" />
+              Histórico Médico / Clínico
+            </h3>
+            <div>
+              <span className="block text-[10px] text-gray-400">Observações Clínicas e Alergias</span>
+              <p className="text-xs text-gray-300 mt-1.5 leading-relaxed bg-black/20 p-3 rounded-lg border border-white/5">
+                {athlete.historico_medico || 'Nenhum histórico médico registrado.'}
+              </p>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Edit Athlete Modal Overlay */}
       {isEditing && (

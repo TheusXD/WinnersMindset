@@ -13,13 +13,7 @@ interface Athlete {
   posicao: string;
 }
 
-const MOCK_ATHLETES: Athlete[] = [
-  { id: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11', nome: 'Lucas Silva', categoria: 'Sub-15', posicao: 'Centroavante' },
-  { id: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12', nome: 'Enzo Gabriel', categoria: 'Sub-15', posicao: 'Meia' },
-  { id: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a13', nome: 'Gabriel Santos', categoria: 'Sub-15', posicao: 'Zagueiro' },
-  { id: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a14', nome: 'Matheus Oliveira', categoria: 'Sub-15', posicao: 'Goleiro' },
-  { id: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a15', nome: 'Pedro Henrique', categoria: 'Sub-15', posicao: 'Ponta Direita' },
-];
+
 
 export default function EvaluationsPage() {
   const router = useRouter();

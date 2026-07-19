@@ -25,47 +25,7 @@ interface Athlete {
   posicao: string;
 }
 
-const MOCK_GAMES: Game[] = [
-  {
-    id: 'f0011c99-9c0b-4ef8-bb6d-6bb9bd380a01',
-    adversario: 'Academia Cruzeiro Sub-15',
-    data_hora: '2026-06-09T15:00:00Z',
-    local: 'Estádio Municipal das Mangueiras',
-    categoria: 'Sub-15',
-    esquema_tatico: '4-3-3',
-    gols_pro: 0,
-    gols_contra: 0,
-    status: 'agendado',
-    escalacao: {
-      GK: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a14',
-      CB_L: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a13',
-      ST: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
-    },
-  },
-  {
-    id: 'f0011c99-9c0b-4ef8-bb6d-6bb9bd380a02',
-    adversario: 'Bangu Esporte Clube Sub-15',
-    data_hora: '2026-06-03T10:00:00Z',
-    local: 'Arena Winner\'s Mindset',
-    categoria: 'Sub-15',
-    esquema_tatico: '4-3-3',
-    gols_pro: 3,
-    gols_contra: 1,
-    status: 'concluido',
-    escalacao: {
-      GK: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a14',
-      ST: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
-    },
-  },
-];
 
-const MOCK_ATHLETES: Athlete[] = [
-  { id: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11', nome: 'Lucas Silva', categoria: 'Sub-15', posicao: 'Centroavante' },
-  { id: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12', nome: 'Enzo Gabriel', categoria: 'Sub-15', posicao: 'Meia' },
-  { id: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a13', nome: 'Gabriel Santos', categoria: 'Sub-15', posicao: 'Zagueiro' },
-  { id: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a14', nome: 'Matheus Oliveira', categoria: 'Sub-15', posicao: 'Goleiro' },
-  { id: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a15', nome: 'Pedro Henrique', categoria: 'Sub-15', posicao: 'Ponta Direita' },
-];
 
 // Definition of layouts positions on the pitch (percentages from top and left)
 const FORMATIONS = {

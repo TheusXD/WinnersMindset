@@ -37,21 +37,7 @@ interface Payment {
   atleta_categoria?: string;
 }
 
-const MOCK_ATHLETES: Athlete[] = [
-  { id: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11', nome: 'Lucas Silva', categoria: 'Sub-15' },
-  { id: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12', nome: 'Enzo Gabriel', categoria: 'Sub-15' },
-  { id: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a13', nome: 'Gabriel Santos', categoria: 'Sub-15' },
-  { id: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a14', nome: 'Matheus Oliveira', categoria: 'Sub-15' },
-  { id: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a15', nome: 'Pedro Henrique', categoria: 'Sub-15' },
-];
 
-const MOCK_PAYMENTS: Payment[] = [
-  { id: '1', atleta_id: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11', tipo_plano: 'mensal', status: 'pendente', vencimento: '2026-07-05', valor: 150.00, data_pagamento: null, atleta_nome: 'Lucas Silva', atleta_categoria: 'Sub-15' },
-  { id: '2', atleta_id: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12', tipo_plano: 'mensal', status: 'pago', vencimento: '2026-06-10', valor: 150.00, data_pagamento: '2026-06-08', atleta_nome: 'Enzo Gabriel', atleta_categoria: 'Sub-15' },
-  { id: '3', atleta_id: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a13', tipo_plano: 'anual', status: 'pago', vencimento: '2026-12-15', valor: 1200.00, data_pagamento: '2025-12-14', atleta_nome: 'Gabriel Santos', atleta_categoria: 'Sub-15' },
-  { id: '4', atleta_id: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a14', tipo_plano: 'mensal', status: 'atrasado', vencimento: '2026-06-05', valor: 150.00, data_pagamento: null, atleta_nome: 'Matheus Oliveira', atleta_categoria: 'Sub-15' },
-  { id: '5', atleta_id: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a15', tipo_plano: 'mensal', status: 'pago', vencimento: '2026-06-20', valor: 150.00, data_pagamento: '2026-06-19', atleta_nome: 'Pedro Henrique', atleta_categoria: 'Sub-15' },
-];
 
 export default function PaymentsPage() {
   const router = useRouter();
@@ -311,7 +297,7 @@ export default function PaymentsPage() {
   const overdueCount = payments.filter(p => p.status === 'atrasado').length;
 
   const filteredPayments = payments.filter(p => {
-    const matchesSearch = p.atleta_nome?.toLowerCase().includes(search.toLowerCase());
+    const matchesSearch = (p.atleta_nome || '').toLowerCase().includes(search.toLowerCase());
     const matchesStatus = statusFilter === 'Todos' || p.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
