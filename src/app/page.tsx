@@ -35,6 +35,9 @@ import {
   PolarAngleAxis,
   PolarRadiusAxis,
   ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
 } from 'recharts';
 
 interface Stats {
@@ -709,17 +712,62 @@ interface TrainingExecution {
 
             {weeklyPlan && totalExecs > 0 ? (
               <div className="space-y-4">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-gray-400">Progresso Geral do Período</span>
-                  <span className="font-bold text-accent">{completedExecs} / {totalExecs} Concluídos ({progressPercent}%)</span>
-                </div>
-                
-                {/* Progress Bar */}
-                <div className="w-full h-2.5 bg-neutral-dark/65 rounded-full overflow-hidden border border-white/5">
-                  <div 
-                    className="h-full bg-accent transition-all duration-500 rounded-full" 
-                    style={{ width: `${progressPercent}%` }}
-                  />
+                <div className="flex flex-col sm:flex-row items-center justify-center gap-6 bg-neutral-dark/20 p-4 rounded-xl border border-white/5">
+                  {/* Doughnut Chart */}
+                  <div className="relative w-36 h-36 flex-shrink-0 flex items-center justify-center">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={[
+                            { name: 'Concluídos', value: completedExecs },
+                            { name: 'Pendentes', value: totalExecs - completedExecs }
+                          ]}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={46}
+                          outerRadius={58}
+                          startAngle={90}
+                          endAngle={-270}
+                          paddingAngle={3}
+                          dataKey="value"
+                        >
+                          <Cell fill="#20c997" />
+                          <Cell fill="rgba(255, 255, 255, 0.08)" />
+                        </Pie>
+                      </PieChart>
+                    </ResponsiveContainer>
+                    <div className="absolute flex flex-col items-center justify-center text-center">
+                      <span className="text-2xl font-black text-white leading-none">{progressPercent}%</span>
+                      <span className="text-[9px] text-accent font-bold uppercase tracking-wider mt-1">Concluído</span>
+                    </div>
+                  </div>
+
+                  {/* Stats Details */}
+                  <div className="flex-1 w-full space-y-2.5">
+                    <div className="space-y-1">
+                      <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Resumo do Período</span>
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="text-gray-400">Total de Treinos:</span>
+                        <span className="font-bold text-white">{totalExecs} {totalExecs === 1 ? 'dia' : 'dias'}</span>
+                      </div>
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="text-gray-400">Dias Treinados:</span>
+                        <span className="font-bold text-accent">{completedExecs} {completedExecs === 1 ? 'dia' : 'dias'}</span>
+                      </div>
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="text-gray-400">Restantes:</span>
+                        <span className="font-bold text-gray-400">{totalExecs - completedExecs} {totalExecs - completedExecs === 1 ? 'dia' : 'dias'}</span>
+                      </div>
+                    </div>
+                    
+                    {/* Linear Progress Bar below the text as a nice accent */}
+                    <div className="w-full h-1.5 bg-neutral-dark/65 rounded-full overflow-hidden border border-white/5">
+                      <div 
+                        className="h-full bg-accent transition-all duration-500 rounded-full" 
+                        style={{ width: `${progressPercent}%` }}
+                      />
+                    </div>
+                  </div>
                 </div>
 
                 {/* Calendar grid */}
