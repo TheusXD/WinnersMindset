@@ -51,20 +51,14 @@ export default function LoginPage() {
   async function resolveEmail(raw: string): Promise<string> {
     if (!isPhoneInput(raw)) return raw.trim();
 
-    // Lookup by phone in perfis_usuarios
+    // Lookup by phone via restricted RPC (only returns a single email, no table exposure)
     const digits = normalizePhone(raw);
-    // Try both formatted and digits versions
-    const { data, error } = await supabase
-      .from('perfis_usuarios')
-      .select('email')
-      .or(`telefone.eq.${raw.trim()},telefone.eq.${digits},telefone.ilike.%${digits}%`)
-      .limit(1)
-      .maybeSingle();
+    const { data, error } = await supabase.rpc('get_email_by_phone', { phone_input: digits });
 
-    if (error || !data?.email) {
+    if (error || !data) {
       throw new Error('Nenhuma conta encontrada com este telefone. Verifique o número ou use o e-mail.');
     }
-    return data.email;
+    return data as string;
   }
 
   async function handleLogin(e: React.FormEvent) {
