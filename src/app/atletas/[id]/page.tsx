@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
+import { todayLocalISODate, addDaysLocalISODate, parseLocalDate } from '@/lib/date';
 import { 
   ArrowLeft, 
   TrendingUp, 
@@ -204,8 +205,8 @@ export default function AthleteDetailPage() {
 
   const [planForm, setPlanForm] = useState({
     titulo: 'Plano de Treino Semanal',
-    data_inicio: new Date().toISOString().split('T')[0],
-    data_fim: new Date(Date.now() + 28 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    data_inicio: todayLocalISODate(),
+    data_fim: addDaysLocalISODate(28),
     segunda: '',
     terca: '',
     quarta: '',
@@ -250,7 +251,7 @@ export default function AthleteDetailPage() {
     if (!athlete) return;
     setSavingEval(true);
 
-    const today = new Date().toISOString().split('T')[0];
+    const today = todayLocalISODate();
     const evalPayload = {
       atleta_id: athlete.id,
       treinador_id: user?.id ?? null,
@@ -292,13 +293,12 @@ export default function AthleteDetailPage() {
         setEvaluations(prev =>
           prev.map(ev => ev.id === tempId ? { ...ev, id: inserted.id } : ev)
         );
-        // Also update the localStorage entry with the real id
+        // Now that it's safely in Supabase, drop the local fallback copy —
+        // otherwise fetchData's merge on next load would show it twice.
         try {
           const existing = localStorage.getItem('local_avaliacoes');
           if (existing) {
-            const list = JSON.parse(existing).map((e: Evaluation) =>
-              e.id === tempId ? { ...e, id: inserted.id } : e
-            );
+            const list = JSON.parse(existing).filter((e: Evaluation) => e.id !== tempId);
             localStorage.setItem('local_avaliacoes', JSON.stringify(list));
           }
         } catch (_) {}
@@ -663,9 +663,12 @@ export default function AthleteDetailPage() {
     setIsEditing(true);
   };
 
+  const [saveEditError, setSaveEditError] = useState<string | null>(null);
+
   const handleSaveEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!athlete) return;
+    setSaveEditError(null);
 
     const updatedData = {
       nome: editAthlete.nome,
@@ -693,9 +696,8 @@ export default function AthleteDetailPage() {
       setAthlete({ ...athlete, ...updatedData });
       setIsEditing(false);
     } catch (err) {
-      console.error('Erro ao atualizar atleta no Supabase. Atualizando localmente:', err);
-      setAthlete({ ...athlete, ...updatedData });
-      setIsEditing(false);
+      console.error('Erro ao atualizar atleta no Supabase:', err);
+      setSaveEditError('Não foi possível salvar as alterações no servidor. Verifique sua conexão e tente novamente.');
     }
   };
 
@@ -707,6 +709,8 @@ export default function AthleteDetailPage() {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+
     async function fetchData() {
       try {
         setLoading(true);
@@ -718,6 +722,7 @@ export default function AthleteDetailPage() {
           .eq('id', id)
           .single();
 
+        if (cancelled) return;
         if (athleteError) throw athleteError;
         setAthlete(athleteData as Athlete);
 
@@ -727,6 +732,8 @@ export default function AthleteDetailPage() {
           .select('id, nota_tecnica, nota_tatica, nota_fisica, nota_comportamental, observacoes, data_avaliacao')
           .eq('atleta_id', id)
           .order('data_avaliacao', { ascending: false });
+
+        if (cancelled) return;
 
         let loadedEvals: Evaluation[] = [];
         if (!evalError && evalData) {
@@ -759,6 +766,8 @@ export default function AthleteDetailPage() {
           `)
           .eq('atleta_id', id);
 
+        if (cancelled) return;
+
         if (!statError && statData) {
           const formattedStats = (statData as unknown as {
             minutos_jogados: number;
@@ -782,6 +791,8 @@ export default function AthleteDetailPage() {
           .eq('atleta_id', id)
           .maybeSingle();
 
+        if (cancelled) return;
+
         if (!trainingError && trainingData) {
           setPersonalizedTraining(trainingData);
         } else {
@@ -796,6 +807,8 @@ export default function AthleteDetailPage() {
           .eq('ativo', true)
           .maybeSingle();
 
+        if (cancelled) return;
+
         if (!planError && planData) {
           setWeeklyPlan(planData);
           setEditPeriodForm({
@@ -808,7 +821,6 @@ export default function AthleteDetailPage() {
             .from('plano_treino_dias')
             .select('*')
             .eq('plano_id', planData.id);
-          setPlanDays(daysData || []);
 
           // Fetch executions
           const { data: execsData } = await supabase
@@ -816,6 +828,9 @@ export default function AthleteDetailPage() {
             .select('*')
             .eq('plano_id', planData.id)
             .order('data', { ascending: true });
+
+          if (cancelled) return;
+          setPlanDays(daysData || []);
           setExecutions(execsData || []);
         } else {
           setWeeklyPlan(null);
@@ -823,6 +838,7 @@ export default function AthleteDetailPage() {
           setExecutions([]);
         }
       } catch (err) {
+        if (cancelled) return;
         console.warn('Erro ao buscar detalhes do atleta, usando dados locais:', err);
         // Fallback to local default data matching the ID, otherwise use Lucas Silva
         setAthlete(DEFAULT_ATHLETE);
@@ -856,13 +872,17 @@ export default function AthleteDetailPage() {
           setPersonalizedTraining(null);
         }
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     }
 
     if (id) {
       fetchData();
     }
+
+    return () => {
+      cancelled = true;
+    };
   }, [id]);
 
   if (loading) {
@@ -881,7 +901,7 @@ export default function AthleteDetailPage() {
   }
 
   // Calculate age
-  const birthDate = new Date(athlete.data_nascimento);
+  const birthDate = parseLocalDate(athlete.data_nascimento);
   const today = new Date();
   let age = today.getFullYear() - birthDate.getFullYear();
   const hasBirthdayPassed =
@@ -1030,6 +1050,11 @@ export default function AthleteDetailPage() {
         <div className="fixed inset-0 z-55 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 overflow-y-auto">
           <div className="glass-card w-full max-w-2xl p-6 border-l-4 border-l-accent relative max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-bold text-white mb-4">Editar Cadastro do Atleta</h3>
+            {saveEditError && (
+              <div className="sm:col-span-2 mb-4 p-3 rounded-xl bg-red-500/15 border border-red-500/30 text-red-400 text-xs">
+                {saveEditError}
+              </div>
+            )}
             <form onSubmit={handleSaveEdit} className="grid sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-semibold text-gray-400 mb-1">Nome Completo</label>
@@ -1184,8 +1209,8 @@ export default function AthleteDetailPage() {
               onClick={() => {
                 setPlanForm({
                   titulo: 'Plano de Treino Semanal',
-                  data_inicio: new Date().toISOString().split('T')[0],
-                  data_fim: new Date(Date.now() + 28 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                  data_inicio: todayLocalISODate(),
+                  data_fim: addDaysLocalISODate(28),
                   segunda: '',
                   terca: '',
                   quarta: '',

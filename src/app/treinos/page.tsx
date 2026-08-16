@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Calendar, Plus, MapPin, Users, CheckCircle, XCircle, AlertCircle, Save, TrendingUp, Video, Edit } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
+import { todayLocalISODate } from '@/lib/date';
 
 interface Training {
   id: string;
@@ -205,7 +206,7 @@ export default function TrainingsPage() {
         nota_fisica: Number(evolutionData.notaFisica),
         nota_comportamental: 7.0,
         observacoes: evolutionData.observacoes || null,
-        data_avaliacao: new Date().toISOString().split('T')[0],
+        data_avaliacao: todayLocalISODate(),
       }]);
 
       if (evalError) throw evalError;
@@ -309,27 +310,23 @@ export default function TrainingsPage() {
 
       if (error) throw error;
 
-      // Update training status to "concluido" once call is saved
+      // Attendance is saved at this point. Marking the training "concluido" is a
+      // separate write — if it fails, don't pretend the training was finalized.
       const { error: updateError } = await supabase
         .from('treinos')
         .update({ status: 'concluido' })
         .eq('id', activeRollCallTraining.id);
 
-      if (updateError) throw updateError;
+      if (updateError) {
+        console.error('Presença salva, mas falha ao marcar treino como concluído:', updateError);
+        alert('A chamada foi salva, mas não foi possível marcar o treino como concluído. Tente novamente em instantes.');
+      }
 
-      // Refresh list
       setActiveRollCallTraining(null);
       fetchTrainingsAndAthletes();
     } catch (err) {
-      console.error('Erro ao salvar chamada no Supabase. Efetuando localmente:', err);
-      
-      // Local updates fallback
-      setTrainings(prev =>
-        prev.map(t =>
-          t.id === activeRollCallTraining.id ? { ...t, status: 'concluido' } : t
-        )
-      );
-      setActiveRollCallTraining(null);
+      console.error('Erro ao salvar chamada no Supabase:', err);
+      alert('Não foi possível salvar a chamada. Verifique sua conexão e tente novamente.');
     } finally {
       setSavingAttendance(false);
     }

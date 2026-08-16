@@ -35,6 +35,7 @@ export default function AthletesPage() {
 
   // Form states for creating athlete
   const [showAddForm, setShowAddForm] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
   const [newAthlete, setNewAthlete] = useState({
     nome: '',
     data_nascimento: '',
@@ -85,6 +86,7 @@ export default function AthletesPage() {
   const handleAddAthlete = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newAthlete.nome || !newAthlete.data_nascimento) return;
+    setAddError(null);
 
     const defaultFoto = 'https://images.unsplash.com/photo-1508098682722-e99c43a406b2?w=150&auto=format&fit=crop&q=80';
     const athleteData = {
@@ -126,15 +128,8 @@ export default function AthletesPage() {
       setShowAddForm(false);
       fetchAthletes();
     } catch (err) {
-      console.error('Erro ao adicionar atleta no Supabase. Adicionando localmente:', err);
-      
-      // Fallback local addition
-      const localNewAthlete: Athlete = {
-        id: Math.random().toString(),
-        ...athleteData,
-      };
-      setAthletes(prev => [...prev, localNewAthlete]);
-      setShowAddForm(false);
+      console.error('Erro ao adicionar atleta no Supabase:', err);
+      setAddError('Não foi possível salvar o atleta no servidor. Verifique sua conexão e tente novamente.');
     }
   };
 
@@ -169,6 +164,11 @@ export default function AthletesPage() {
       {isAdmin && showAddForm && (
         <div className="glass-card p-6 border-l-4 border-l-accent relative">
           <h3 className="text-lg font-bold text-white mb-4">Adicionar Novo Atleta</h3>
+          {addError && (
+            <div className="mb-4 p-3 rounded-xl bg-red-500/15 border border-red-500/30 text-red-400 text-xs">
+              {addError}
+            </div>
+          )}
           <form onSubmit={handleAddAthlete} className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <div>
               <label className="block text-xs font-semibold text-gray-400 mb-1">Nome Completo</label>

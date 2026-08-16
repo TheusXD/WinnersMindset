@@ -105,35 +105,59 @@ export default function CadastroPage() {
 
     try {
       // 1. Sign up user in Supabase Auth
+      let userId: string;
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
         password,
       });
 
-      if (authError) throw authError;
+      if (authError) {
+        // If this email was already created by a previous attempt where the
+        // signup succeeded but the solicitacao insert below failed, signUp
+        // will report "already registered" and leave the user stuck forever
+        // (never approvable, never able to re-register). Try to recover by
+        // signing into that same account and resuming the request instead.
+        const alreadyRegistered = authError.message.toLowerCase().includes('already registered')
+          || authError.message.toLowerCase().includes('already exists');
+        if (!alreadyRegistered) throw authError;
 
-      if (!authData.user) {
-        throw new Error('Erro ao criar conta de usuário. Tente novamente.');
+        const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+        if (signInError || !signInData.user) throw authError;
+        userId = signInData.user.id;
+      } else {
+        if (!authData.user) {
+          throw new Error('Erro ao criar conta de usuário. Tente novamente.');
+        }
+        userId = authData.user.id;
       }
 
-      // 2. Insert into solicitacoes_cadastro
-      const { error: dbError } = await supabase
+      // 2. Skip the insert if a request already exists for this account
+      // (recovered from a prior partial failure) — otherwise create it.
+      const { data: existingRequest } = await supabase
         .from('solicitacoes_cadastro')
-        .insert({
-          usuario_id: authData.user.id,
-          email,
-          nome,
-          telefone,
-          data_nascimento: dataNascimento,
-          cpf,
-          rg,
-          nome_pai: nomePai || null,
-          nome_mae: nomeMae || null,
-          endereco,
-          status: 'pendente'
-        });
+        .select('id')
+        .eq('usuario_id', userId)
+        .maybeSingle();
 
-      if (dbError) throw dbError;
+      if (!existingRequest) {
+        const { error: dbError } = await supabase
+          .from('solicitacoes_cadastro')
+          .insert({
+            usuario_id: userId,
+            email,
+            nome,
+            telefone,
+            data_nascimento: dataNascimento,
+            cpf,
+            rg,
+            nome_pai: nomePai || null,
+            nome_mae: nomeMae || null,
+            endereco,
+            status: 'pendente'
+          });
+
+        if (dbError) throw dbError;
+      }
 
       // Show success screen (Step 4)
       setStep(4);

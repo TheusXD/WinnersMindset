@@ -59,8 +59,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             .update({ email: currentUser.email })
             .eq('id', currentUser.id);
         }
+      } else if (error && error.code !== 'PGRST116') {
+        // A real fetch error (network/server), not "no row found" — don't
+        // treat this as a brand-new user or we'd upsert a placeholder
+        // profile (email-prefix name, no photo) over the user's real one.
+        console.error('Error fetching profile, will retry later:', error.message);
       } else {
-        // Fallback for mock/local testing: derive role from email prefix
+        // No row found for this user yet — fallback for mock/local testing:
+        // derive role from email prefix
         const email = currentUser.email || '';
         const isUserAdmin = STRICT_ADMIN_EMAILS.includes(email);
         const fallbackProfile: Profile = {

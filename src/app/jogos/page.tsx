@@ -434,7 +434,11 @@ export default function GamesPage() {
       )}
 
       {/* Interactive Tactical Board */}
-      {activeBoardGame && (
+      {activeBoardGame && (() => {
+        // esquema_tatico is nullable in the DB (CHECK constraints allow NULL),
+        // so fall back to a known formation instead of indexing FORMATIONS[null].
+        const currentFormation = FORMATIONS[activeBoardGame.esquema_tatico] || FORMATIONS['4-3-3'];
+        return (
         <div className="grid lg:grid-cols-3 gap-6">
           {/* Pitch Area */}
           <div className="lg:col-span-2 glass-card p-4 flex flex-col items-center">
@@ -449,12 +453,24 @@ export default function GamesPage() {
                   disabled={!isAdmin}
                   className="glass-input text-xs py-1.5 bg-neutral-dark/80 disabled:opacity-75 disabled:cursor-not-allowed"
                   value={activeBoardGame.esquema_tatico}
-                  onChange={(e) =>
+                  onChange={(e) => {
+                    const newScheme = e.target.value as '4-3-3' | '4-4-2' | '3-5-2' | '5-3-2' | '4-2-3-1';
+                    // Different formations reuse position ids for different
+                    // roles — drop any assignment that has no slot in the
+                    // new formation instead of leaving the player stranded.
+                    const validIds = new Set(FORMATIONS[newScheme].map((p) => p.id));
+                    setLineup((prev) => {
+                      const pruned: Record<string, string> = {};
+                      for (const [posId, athleteId] of Object.entries(prev)) {
+                        if (validIds.has(posId)) pruned[posId] = athleteId;
+                      }
+                      return pruned;
+                    });
                     setActiveBoardGame({
                       ...activeBoardGame,
-                      esquema_tatico: e.target.value as '4-3-3' | '4-4-2' | '3-5-2' | '5-3-2' | '4-2-3-1',
-                    })
-                  }
+                      esquema_tatico: newScheme,
+                    });
+                  }}
                 >
                   {['4-3-3', '4-4-2', '3-5-2', '5-3-2', '4-2-3-1'].map(e => (
                     <option key={e} value={e}>{e}</option>
@@ -475,7 +491,7 @@ export default function GamesPage() {
               <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-48 h-20 border-t border-x border-white/10" />
 
               {/* Render Players in Positions */}
-              {FORMATIONS[activeBoardGame.esquema_tatico].map((pos) => {
+              {currentFormation.map((pos) => {
                 const assignedAthleteId = lineup[pos.id];
                 const athlete = athletes.find((a) => a.id === assignedAthleteId);
                 const isSelected = selectedPosition === pos.id;
@@ -531,7 +547,7 @@ export default function GamesPage() {
             {!isAdmin ? (
               <div className="space-y-3 flex-1 overflow-y-auto max-h-[360px]">
                 <p className="text-xs text-accent font-semibold mb-2">Escalação do Time:</p>
-                {FORMATIONS[activeBoardGame.esquema_tatico].map((pos) => {
+                {currentFormation.map((pos) => {
                   const assignedAthleteId = lineup[pos.id];
                   const athlete = athletes.find((a) => a.id === assignedAthleteId);
                   return (
@@ -610,7 +626,8 @@ export default function GamesPage() {
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* Matches List */}
       {!activeBoardGame && (

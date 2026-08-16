@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
+import { todayLocalISODate } from '@/lib/date';
 import { 
   CreditCard, 
   Search, 
@@ -54,6 +55,7 @@ export default function PaymentsPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingPayment, setEditingPayment] = useState<Payment | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     atleta_id: '',
     tipo_plano: 'mensal' as 'mensal' | 'anual',
@@ -161,11 +163,12 @@ export default function PaymentsPage() {
   }
 
   const handleOpenAdd = () => {
+    setSaveError(null);
     setFormData({
       atleta_id: athletes[0]?.id || '',
       tipo_plano: 'mensal',
       status: 'pendente',
-      vencimento: new Date().toISOString().split('T')[0],
+      vencimento: todayLocalISODate(),
       valor: '150.00',
       data_pagamento: '',
     });
@@ -174,6 +177,7 @@ export default function PaymentsPage() {
   };
 
   const handleOpenEdit = (payment: Payment) => {
+    setSaveError(null);
     setEditingPayment(payment);
     setFormData({
       atleta_id: payment.atleta_id,
@@ -191,7 +195,7 @@ export default function PaymentsPage() {
     if (!formData.atleta_id || !formData.vencimento) return;
 
     setSubmitting(true);
-    const selectedAthlete = athletes.find(a => a.id === formData.atleta_id);
+    setSaveError(null);
 
     const paymentData = {
       atleta_id: formData.atleta_id,
@@ -199,7 +203,7 @@ export default function PaymentsPage() {
       status: formData.status,
       vencimento: formData.vencimento,
       valor: formData.valor ? parseFloat(formData.valor) : null,
-      data_pagamento: formData.status === 'pago' ? (formData.data_pagamento || new Date().toISOString().split('T')[0]) : null,
+      data_pagamento: formData.status === 'pago' ? (formData.data_pagamento || todayLocalISODate()) : null,
     };
 
     try {
@@ -223,32 +227,8 @@ export default function PaymentsPage() {
       setShowAddModal(false);
       fetchPaymentsAndAthletes();
     } catch (err) {
-      console.error('Erro ao salvar pagamento no Supabase. Atualizando localmente:', err);
-      
-      // Local fallback
-      if (editingPayment) {
-        setPayments(prev =>
-          prev.map(p =>
-            p.id === editingPayment.id
-              ? { 
-                  ...p, 
-                  ...paymentData, 
-                  atleta_nome: selectedAthlete?.nome || p.atleta_nome,
-                  atleta_categoria: selectedAthlete?.categoria || p.atleta_categoria
-                }
-              : p
-          )
-        );
-      } else {
-        const newRecord: Payment = {
-          id: Math.random().toString(),
-          ...paymentData,
-          atleta_nome: selectedAthlete?.nome || 'Atleta',
-          atleta_categoria: selectedAthlete?.categoria || 'N/A',
-        };
-        setPayments(prev => [newRecord, ...prev]);
-      }
-      setShowAddModal(false);
+      console.error('Erro ao salvar pagamento no Supabase:', err);
+      setSaveError('Não foi possível salvar este lançamento no servidor. Verifique sua conexão e tente novamente.');
     } finally {
       setSubmitting(false);
     }
@@ -260,8 +240,9 @@ export default function PaymentsPage() {
       const { error } = await supabase.from('pagamentos').delete().eq('id', id);
       if (error) throw error;
       fetchPaymentsAndAthletes();
-    } catch {
-      setPayments(prev => prev.filter(p => p.id !== id));
+    } catch (err) {
+      console.error('Erro ao remover pagamento no Supabase:', err);
+      alert('Não foi possível remover este pagamento. Verifique sua conexão e tente novamente.');
     }
   };
 
@@ -472,6 +453,11 @@ export default function PaymentsPage() {
             </h3>
 
             <form onSubmit={handleSavePayment} className="space-y-4">
+              {saveError && (
+                <div className="p-3 rounded-xl bg-red-500/15 border border-red-500/30 text-red-400 text-xs">
+                  {saveError}
+                </div>
+              )}
               <div>
                 <label className="block text-xs font-semibold text-gray-400 mb-1">Selecione o Atleta</label>
                 <select

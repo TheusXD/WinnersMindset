@@ -79,25 +79,35 @@ export default function AdminSolicitacoesPage() {
     setError(null);
 
     try {
-      // 1. Create the athlete record in `atletas`
-      const { error: athleteError } = await supabase
+      // 1. Create the athlete record in `atletas` — unless a retry after a
+      // partial failure already created one for this request, in which case
+      // re-inserting would duplicate the athlete.
+      const { data: existingAthlete } = await supabase
         .from('atletas')
-        .insert({
-          nome: selectedReq.nome,
-          data_nascimento: selectedReq.data_nascimento,
-          categoria,
-          posicao,
-          status: 'ativo',
-          telefone: selectedReq.telefone,
-          endereco: selectedReq.endereco,
-          usuario_id: selectedReq.usuario_id,
-          cpf: selectedReq.cpf,
-          rg: selectedReq.rg,
-          nome_pai: selectedReq.nome_pai,
-          nome_mae: selectedReq.nome_mae
-        });
+        .select('id')
+        .eq('usuario_id', selectedReq.usuario_id)
+        .maybeSingle();
 
-      if (athleteError) throw athleteError;
+      if (!existingAthlete) {
+        const { error: athleteError } = await supabase
+          .from('atletas')
+          .insert({
+            nome: selectedReq.nome,
+            data_nascimento: selectedReq.data_nascimento,
+            categoria,
+            posicao,
+            status: 'ativo',
+            telefone: selectedReq.telefone,
+            endereco: selectedReq.endereco,
+            usuario_id: selectedReq.usuario_id,
+            cpf: selectedReq.cpf,
+            rg: selectedReq.rg,
+            nome_pai: selectedReq.nome_pai,
+            nome_mae: selectedReq.nome_mae
+          });
+
+        if (athleteError) throw athleteError;
+      }
 
       // 2. Create/upsert the profile in `perfis_usuarios`
       const { error: profileError } = await supabase

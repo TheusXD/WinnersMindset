@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
 import { supabase } from '@/lib/supabase';
+import { parseLocalDate } from '@/lib/date';
 import { 
   Users, 
   Calendar, 
@@ -452,7 +453,11 @@ interface TrainingExecution {
     }
 
     fetchDashboardData();
-  }, [isAdmin, profile]);
+    // profile is replaced with a new object on every auth event (including
+    // silent token refreshes), which would otherwise re-run this whole fetch
+    // and flash the dashboard back to the loading spinner. Key off the
+    // actual user id instead.
+  }, [isAdmin, profile?.id]);
 
   const handleToggleExecution = async (execId: string, currentStatus: boolean) => {
     const exec = executions.find(e => e.id === execId);
@@ -495,6 +500,19 @@ interface TrainingExecution {
       <div className="text-center py-20 text-gray-400 flex flex-col items-center justify-center space-y-2">
         <Loader2 className="h-6 w-6 animate-spin text-accent" />
         <span>Carregando seu painel esportivo...</span>
+      </div>
+    );
+  }
+
+  // If a non-admin's data failed to load (a thrown error, not just "no
+  // athlete found" — that case is synthesized to a mock athlete above),
+  // don't fall through to the club-wide coach dashboard below with stale
+  // placeholder numbers that don't belong to this student.
+  if (!isAdmin && !studentAthlete) {
+    return (
+      <div className="text-center py-20 text-gray-400 flex flex-col items-center justify-center space-y-3">
+        <AlertCircle className="h-8 w-8 text-red-400" />
+        <p className="text-sm">Não foi possível carregar os seus dados agora. Tente novamente em instantes.</p>
       </div>
     );
   }
@@ -562,7 +580,7 @@ interface TrainingExecution {
     ];
 
     // Calculate age
-    const birthDate = new Date(studentAthlete.data_nascimento);
+    const birthDate = parseLocalDate(studentAthlete.data_nascimento);
     const today = new Date();
     let age = today.getFullYear() - birthDate.getFullYear();
     if (today.getMonth() < birthDate.getMonth() || (today.getMonth() === birthDate.getMonth() && today.getDate() < birthDate.getDate())) {

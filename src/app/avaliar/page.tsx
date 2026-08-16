@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { ClipboardCheck, Users, Calendar, AlertCircle, FileText, CheckCircle2, Copy, Save } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
+import { todayLocalISODate, parseLocalDate } from '@/lib/date';
 
 interface Athlete {
   id: string;
@@ -124,7 +125,7 @@ export default function EvaluationsPage() {
     const evaluationData = {
       atleta_id: selectedAthleteId,
       treinador_id: user?.id ?? null,
-      data_avaliacao: new Date().toISOString().split('T')[0],
+      data_avaliacao: todayLocalISODate(),
       nota_tecnica: Number(notaTecnica),
       nota_tatica: Number(notaTatica),
       nota_fisica: Number(notaFisica),
@@ -167,7 +168,7 @@ RELATÓRIO DE AVALIAÇÃO TÉCNICA - WINNER'S MINDSET
 ===========================================
 Atleta: ${athlete?.nome || 'Atleta não especificado'}
 Categoria: ${athlete?.categoria || 'N/A'} | Posição: ${athlete?.posicao || 'N/A'}
-Data da Avaliação: ${new Date(data.data_avaliacao).toLocaleDateString('pt-BR')}
+Data da Avaliação: ${parseLocalDate(data.data_avaliacao).toLocaleDateString('pt-BR')}
 -------------------------------------------
 NOTAS (Escala 1 a 10):
 - Nota Técnica: ${data.nota_tecnica.toFixed(1)}
