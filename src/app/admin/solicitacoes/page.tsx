@@ -283,7 +283,7 @@ export default function AdminSolicitacoesPage() {
 
       {/* APPROVAL MODAL */}
       {selectedReq && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
+        <div className="fixed inset-0 z-55 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 overflow-y-auto">
           <div className="glass-card w-full max-w-md p-6 border-l-4 border-l-accent space-y-4">
             <div>
               <h3 className="text-lg font-bold text-white">Configurar e Aprovar Atleta</h3>
@@ -353,7 +353,7 @@ export default function AdminSolicitacoesPage() {
 
       {/* REJECT MODAL */}
       {rejectingReq && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
+        <div className="fixed inset-0 z-55 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 overflow-y-auto">
           <div className="glass-card w-full max-w-sm p-6 border-l-4 border-l-red-500 space-y-4">
             <div>
               <h3 className="text-lg font-bold text-white flex items-center gap-2">

@@ -1633,8 +1633,8 @@ export default function AthleteDetailPage() {
 
       {/* Edit Personalized Training Modal Overlay */}
       {isEditingTraining && (
-        <div className="fixed inset-0 z-55 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
-          <div className="glass-card w-full max-w-md p-6 border-l-4 border-l-accent relative">
+        <div className="fixed inset-0 z-55 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="glass-card w-full max-w-md p-6 border-l-4 border-l-accent relative max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-bold text-white mb-2">Editar Treino Direcionado</h3>
             <p className="text-xs text-gray-400 mb-4">
               Defina o foco e exercícios específicos para <strong className="text-white">{athlete.nome}</strong>.
@@ -1806,7 +1806,7 @@ export default function AthleteDetailPage() {
 
       {/* Evaluation Modal */}
       {isEvaluating && athlete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 overflow-y-auto">
+        <div className="fixed inset-0 z-55 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 overflow-y-auto">
           <div className="glass-card w-full max-w-xl p-6 border-l-4 border-l-accent relative max-h-[90vh] overflow-y-auto">
             <div className="flex items-center gap-2 mb-4">
               <ClipboardCheck className="h-5 w-5 text-accent" />

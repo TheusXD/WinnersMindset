@@ -446,8 +446,8 @@ export default function PaymentsPage() {
 
       {/* Add / Edit Modal Overlay */}
       {showAddModal && (
-        <div className="fixed inset-0 z-55 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
-          <div className="glass-card w-full max-w-md p-6 border-l-4 border-l-accent relative">
+        <div className="fixed inset-0 z-55 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="glass-card w-full max-w-md p-6 border-l-4 border-l-accent relative max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-bold text-white mb-4">
               {editingPayment ? 'Editar Lançamento' : 'Registrar Novo Lançamento'}
             </h3>
