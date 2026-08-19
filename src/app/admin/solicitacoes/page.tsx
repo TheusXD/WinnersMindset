@@ -79,7 +79,22 @@ export default function AdminSolicitacoesPage() {
     setError(null);
 
     try {
-      // 1. Create the athlete record in `atletas` — unless a retry after a
+      // 1. Create/upsert the profile in `perfis_usuarios` first — `atletas.usuario_id`
+      // has a foreign key to `perfis_usuarios.id`, so the profile must exist
+      // before the athlete row can reference it.
+      const { error: profileError } = await supabase
+        .from('perfis_usuarios')
+        .upsert({
+          id: selectedReq.usuario_id,
+          nome: selectedReq.nome,
+          cargo: 'atleta',
+          telefone: selectedReq.telefone,
+          email: selectedReq.email
+        });
+
+      if (profileError) throw profileError;
+
+      // 2. Create the athlete record in `atletas` — unless a retry after a
       // partial failure already created one for this request, in which case
       // re-inserting would duplicate the athlete.
       const { data: existingAthlete } = await supabase
@@ -108,19 +123,6 @@ export default function AdminSolicitacoesPage() {
 
         if (athleteError) throw athleteError;
       }
-
-      // 2. Create/upsert the profile in `perfis_usuarios`
-      const { error: profileError } = await supabase
-        .from('perfis_usuarios')
-        .upsert({
-          id: selectedReq.usuario_id,
-          nome: selectedReq.nome,
-          cargo: 'atleta',
-          telefone: selectedReq.telefone,
-          email: selectedReq.email
-        });
-
-      if (profileError) throw profileError;
 
       // 3. Update the request status
       const { error: reqError } = await supabase

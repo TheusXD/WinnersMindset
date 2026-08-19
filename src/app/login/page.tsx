@@ -171,14 +171,14 @@ export default function LoginPage() {
                       required
                       value={credential}
                       onChange={(e) => setCredential(e.target.value)}
-                      className="w-full pl-9 glass-input text-sm"
+                      className="w-full pl-9 pr-16 glass-input text-sm"
                       placeholder="Ex: professor@wm.com ou (21) 99999-8888"
                       autoComplete="username"
                       inputMode="email"
                     />
                     {/* Live badge */}
                     {credential !== '' && (
-                      <span className={`absolute inset-y-0 right-0 pr-3 flex items-center text-[10px] font-bold uppercase tracking-wider ${inputIsPhone ? 'text-blue-400' : 'text-accent'}`}>
+                      <span className={`absolute inset-y-0 right-0 pr-3 flex items-center text-[10px] font-bold uppercase tracking-wider pointer-events-none ${inputIsPhone ? 'text-blue-400' : 'text-accent'}`}>
                         {inputIsPhone ? 'Tel' : 'E-mail'}
                       </span>
                     )}

@@ -57,6 +57,10 @@ body {
   padding-right: 2.25rem;
 }
 
+.glass-input.pr-16 {
+  padding-right: 4rem;
+}
+
 .glass-input:focus {
   border-color: #20c997;
   box-shadow: 0 0 0 2px rgba(32, 201, 151, 0.25);
