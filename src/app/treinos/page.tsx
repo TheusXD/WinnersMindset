@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { Calendar, Plus, MapPin, Users, CheckCircle, XCircle, AlertCircle, Save, TrendingUp, Video, Edit } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { todayLocalISODate } from '@/lib/date';
+import { getSafeYoutubeEmbedUrl } from '@/lib/youtube';
 
 interface Training {
   id: string;
@@ -74,7 +75,7 @@ export default function TrainingsPage() {
         .order('data_hora', { ascending: false });
 
       const { data: athleteData, error: athleteError } = await supabase
-        .from('atletas')
+        .from('atletas_roster')
         .select('id, nome, categoria, posicao');
 
       if (trainingError || athleteError) throw trainingError || athleteError;
@@ -239,9 +240,12 @@ export default function TrainingsPage() {
       // 1. Get filtered athletes for the category
       const categoryAthletes = athletes.filter(a => a.categoria === training.categoria);
 
-      // 2. Fetch existing attendance records for this training
+      // 2. Fetch existing attendance records for this training. Non-admins
+      // only have RLS access to their own presencas row, so they read the
+      // presencas_roster view instead (presence flag for the whole team,
+      // without the potentially medical/personal absence justificativa).
       const { data: existingAttendance, error } = await supabase
-        .from('presencas')
+        .from(isAdmin ? 'presencas' : 'presencas_roster')
         .select('*')
         .eq('treino_id', training.id);
 
@@ -566,6 +570,7 @@ export default function TrainingsPage() {
               hour: '2-digit',
               minute: '2-digit',
             });
+            const safeYoutubeUrl = getSafeYoutubeEmbedUrl(training.youtube_url);
 
             return (
               <div
@@ -610,13 +615,11 @@ export default function TrainingsPage() {
                     )}
                   </div>
 
-                  {training.youtube_url && (
+                  {safeYoutubeUrl && (
                     <div className="mt-3 aspect-video max-w-md w-full rounded-xl overflow-hidden border border-white/10 shadow-md">
                       <iframe
                         className="w-full h-full"
-                        src={training.youtube_url.includes('watch?v=') 
-                          ? `https://www.youtube.com/embed/${training.youtube_url.split('v=')[1]?.split('&')[0]}` 
-                          : training.youtube_url}
+                        src={safeYoutubeUrl}
                         title="YouTube video player"
                         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                         allowFullScreen

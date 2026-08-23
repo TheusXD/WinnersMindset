@@ -6,21 +6,17 @@ import { Search, Plus, UserPlus, Filter, ShieldAlert, ArrowUpRight } from 'lucid
 import { useAuth } from '@/lib/auth-context';
 import { supabase } from '@/lib/supabase';
 
+// Matches the public.atletas_roster view (non-sensitive columns only) —
+// this page never needs CPF/RG/medical/contact fields, just the roster.
 interface Athlete {
   id: string;
   nome: string;
-  data_nascimento: string;
   categoria: string;
   posicao: string;
   peso: number | null;
   altura: number | null;
   status: 'ativo' | 'lesionado' | 'inativo';
   foto_url: string | null;
-  telefone?: string | null;
-  endereco?: string | null;
-  telefone_responsavel?: string | null;
-  historico_medico?: string | null;
-  usuario_id?: string | null;
 }
 
 
@@ -57,7 +53,7 @@ export default function AthletesPage() {
     try {
       setLoading(true);
       const { data, error } = await supabase
-        .from('atletas')
+        .from('atletas_roster')
         .select('*')
         .order('nome', { ascending: true });
 

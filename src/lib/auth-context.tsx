@@ -21,17 +21,6 @@ interface AuthContextType {
   clearGlobalAuthError: () => void;
 }
 
-const STRICT_ADMIN_EMAILS = [
-  'admin_test@athle.com',
-  'admin_test@legionarios.com',
-  'admin@legionarios.com',
-  'treinador@legionarios.com',
-  'professor@wm.com',
-  'matheus_silva4412@hotmail.com',
-  'leandro.wm@hotmail.com',
-  'miura.sport@hotmail.com'
-];
-
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -65,28 +54,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // profile (email-prefix name, no photo) over the user's real one.
         console.error('Error fetching profile, will retry later:', error.message);
       } else {
-        // No row found for this user yet — fallback for mock/local testing:
-        // derive role from email prefix
+        // No row found for this user yet. Cargo (admin vs atleta) is
+        // decided server-side by the bootstrap_own_profile RPC — it checks
+        // the verified JWT email against the bootstrap-admin allowlist in
+        // the database, so the client never needs to know that list itself.
         const email = currentUser.email || '';
-        const isUserAdmin = STRICT_ADMIN_EMAILS.includes(email);
-        const fallbackProfile: Profile = {
-          id: currentUser.id,
-          nome: email.split('@')[0],
-          cargo: isUserAdmin ? 'treinador' : 'atleta',
-          foto_url: isUserAdmin 
-            ? 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=150&auto=format&fit=crop&q=80'
-            : null
-        };
-        // Upsert into remote database so it exists for foreign key references (e.g. avaliacoes.treinador_id)
         try {
-          const { error: upsertErr } = await supabase.from('perfis_usuarios').upsert([{ ...fallbackProfile, email }]);
-          if (upsertErr) {
-            console.error('Failed to upsert fallback profile to Supabase:', upsertErr.message);
+          const { data: bootstrapped, error: bootstrapErr } = await supabase
+            .rpc('bootstrap_own_profile', { display_nome: email.split('@')[0] });
+          if (!bootstrapErr && bootstrapped) {
+            setProfile(bootstrapped as Profile);
+          } else {
+            console.error('Failed to bootstrap profile:', bootstrapErr?.message);
           }
         } catch (dbErr) {
-          console.warn('Could not upsert profile fallback to Supabase:', dbErr);
+          console.warn('Could not bootstrap profile:', dbErr);
         }
-        setProfile(fallbackProfile);
       }
     } catch (err) {
       console.error('Error fetching user profile:', err);
@@ -94,18 +77,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function isApproved(currentUser: User): Promise<boolean> {
-    const email = currentUser.email || '';
-    const STRICT_TEST_STUDENTS = [
-      'aluno_test@athle.com',
-      'aluno_test@legionarios.com',
-      'aluno@legionarios.com'
-    ];
-    const isFallbackAdmin = STRICT_ADMIN_EMAILS.includes(email) || STRICT_TEST_STUDENTS.includes(email);
-    if (isFallbackAdmin) {
-      return true;
-    }
-
     try {
+      // Bootstrap-admin accounts (staff allowlisted server-side) skip the
+      // normal solicitacao/approval workflow on first login.
+      const { data: isBootstrapAdmin, error: bootstrapCheckErr } = await supabase.rpc('is_bootstrap_admin');
+      if (!bootstrapCheckErr && isBootstrapAdmin) {
+        return true;
+      }
+
       // 1. Check if they have a solicitation and verify status
       const { data: request, error: reqError } = await supabase
         .from('solicitacoes_cadastro')

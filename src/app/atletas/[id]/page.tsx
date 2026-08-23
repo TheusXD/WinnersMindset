@@ -2,11 +2,12 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
 import { todayLocalISODate, addDaysLocalISODate, parseLocalDate } from '@/lib/date';
-import { 
+import { getSafeYoutubeEmbedUrl } from '@/lib/youtube';
+import {
   ArrowLeft, 
   TrendingUp, 
   Calendar, 
@@ -176,6 +177,7 @@ const DEFAULT_GAME_STATS: GameStat[] = [
 export default function AthleteDetailPage() {
   const { isAdmin, user } = useAuth();
   const params = useParams();
+  const router = useRouter();
   const id = params.id as string;
 
   const [athlete, setAthlete] = useState<Athlete | null>(null);
@@ -701,6 +703,31 @@ export default function AthleteDetailPage() {
     }
   };
 
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const handleDeleteAthlete = async () => {
+    if (!athlete) return;
+    setDeleting(true);
+    setDeleteError(null);
+
+    try {
+      const { error } = await supabase
+        .from('atletas')
+        .delete()
+        .eq('id', athlete.id);
+
+      if (error) throw error;
+
+      router.push('/atletas');
+    } catch (err) {
+      console.error('Erro ao remover atleta no Supabase:', err);
+      setDeleteError('Não foi possível remover o atleta. Verifique sua conexão e tente novamente.');
+      setDeleting(false);
+    }
+  };
+
   useEffect(() => {
     const timer = setTimeout(() => {
       setMounted(true);
@@ -839,24 +866,30 @@ export default function AthleteDetailPage() {
         }
       } catch (err) {
         if (cancelled) return;
-        console.warn('Erro ao buscar detalhes do atleta, usando dados locais:', err);
-        // Fallback to local default data matching the ID, otherwise use Lucas Silva
-        setAthlete(DEFAULT_ATHLETE);
-        let finalEvals = [...DEFAULT_EVALUATIONS];
-        try {
-          const localStr = localStorage.getItem('local_avaliacoes');
-          if (localStr) {
-            const locals = JSON.parse(localStr);
-            const filteredLocals = locals.filter((l: any) => l.atleta_id === id);
-            finalEvals = [...filteredLocals, ...finalEvals];
-          }
-        } catch (e) {
-          console.error(e);
-        }
-        setEvaluations(finalEvals);
-        setGameStats(DEFAULT_GAME_STATS);
+        console.warn('Erro ao buscar detalhes do atleta:', err);
 
+        // Only substitute the local demo/offline data when this really is
+        // the seeded showcase athlete's id. Any other id failing here means
+        // either a genuine connectivity issue or — since atletas SELECT is
+        // now restricted to admin/owner — RLS correctly denying access to
+        // someone else's profile; either way, silently showing a different
+        // real person's data (Lucas Silva's) in their place would be
+        // misleading, so fall through to "Atleta não encontrado" instead.
         if (id === 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11') {
+          setAthlete(DEFAULT_ATHLETE);
+          let finalEvals = [...DEFAULT_EVALUATIONS];
+          try {
+            const localStr = localStorage.getItem('local_avaliacoes');
+            if (localStr) {
+              const locals = JSON.parse(localStr);
+              const filteredLocals = locals.filter((l: any) => l.atleta_id === id);
+              finalEvals = [...filteredLocals, ...finalEvals];
+            }
+          } catch (e) {
+            console.error(e);
+          }
+          setEvaluations(finalEvals);
+          setGameStats(DEFAULT_GAME_STATS);
           setPersonalizedTraining({
             id: 'mock-pt1',
             titulo: 'Aprimoramento de Pivô e Finalização',
@@ -869,6 +902,9 @@ export default function AthleteDetailPage() {
             data_hora: new Date(Date.now() + 86400000).toISOString(),
           });
         } else {
+          setAthlete(null);
+          setEvaluations([]);
+          setGameStats([]);
           setPersonalizedTraining(null);
         }
       } finally {
@@ -998,6 +1034,13 @@ export default function AthleteDetailPage() {
             >
               <PlusCircle className="h-4 w-4" />
               Nova Avaliação
+            </button>
+            <button
+              onClick={() => { setDeleteError(null); setShowDeleteConfirm(true); }}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-red-500/10 border border-red-500/20 px-5 py-2.5 text-xs font-bold text-red-400 hover:bg-red-500/20 transition-colors shadow-md text-center"
+            >
+              <Trash2 className="h-4 w-4" />
+              Remover Atleta
             </button>
           </div>
         )}
@@ -1193,6 +1236,48 @@ export default function AthleteDetailPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Athlete Confirmation Modal */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-55 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="glass-card w-full max-w-sm p-6 border-l-4 border-l-red-500 space-y-4">
+            <div>
+              <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                <AlertCircle className="h-5 w-5 text-red-500" />
+                Remover Atleta
+              </h3>
+              <p className="text-xs text-gray-400 mt-2">
+                Deseja realmente remover <strong className="text-white">{athlete.nome}</strong> do sistema?
+                Esta ação é irreversível e apagará avaliações, estatísticas, treinos e pagamentos associados.
+              </p>
+            </div>
+
+            {deleteError && (
+              <div className="p-3 rounded-xl bg-red-500/15 border border-red-500/30 text-red-400 text-xs text-center">{deleteError}</div>
+            )}
+
+            <div className="flex justify-end gap-2 border-t border-white/5 pt-3">
+              <button
+                type="button"
+                onClick={() => setShowDeleteConfirm(false)}
+                className="px-4 py-2 text-xs font-bold text-gray-300 hover:text-white"
+                disabled={deleting}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteAthlete}
+                disabled={deleting}
+                className="flex items-center gap-1 px-4 py-2 text-xs font-bold bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors disabled:opacity-50"
+              >
+                {deleting && <Loader2 className="h-3 w-3 animate-spin" />}
+                Remover Atleta
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -1567,7 +1652,7 @@ export default function AthleteDetailPage() {
               </p>
             </div>
             
-            {personalizedTraining.youtube_url && (
+            {getSafeYoutubeEmbedUrl(personalizedTraining.youtube_url) && (
               <div className="space-y-1.5">
                 <span className="text-[10px] font-bold text-accent flex items-center gap-1">
                   <Video className="h-3.5 w-3.5" />
@@ -1576,9 +1661,7 @@ export default function AthleteDetailPage() {
                 <div className="aspect-video max-w-lg w-full rounded-xl overflow-hidden border border-white/10 shadow-md">
                   <iframe
                     className="w-full h-full"
-                    src={personalizedTraining.youtube_url.includes('watch?v=') 
-                      ? `https://www.youtube.com/embed/${personalizedTraining.youtube_url.split('v=')[1]?.split('&')[0]}` 
-                      : personalizedTraining.youtube_url}
+                    src={getSafeYoutubeEmbedUrl(personalizedTraining.youtube_url)!}
                     title="Vídeo de Treinamento"
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                     allowFullScreen

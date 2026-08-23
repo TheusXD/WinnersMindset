@@ -121,11 +121,6 @@ export default function LoginPage() {
     }
   }
 
-  const autofillTestAccount = (role: 'admin' | 'aluno') => {
-    if (role === 'admin') { setCredential('admin_test@athle.com'); setPassword('admin123'); }
-    else { setCredential('aluno_test@athle.com'); setPassword('aluno123'); }
-  };
-
   return (
     <div className="min-h-[80vh] flex items-center justify-center px-4 py-12">
       <div className="max-w-md w-full glass-card p-8 border-t-4 border-t-accent shadow-2xl relative overflow-hidden">

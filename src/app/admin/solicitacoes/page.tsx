@@ -35,9 +35,13 @@ export default function AdminSolicitacoesPage() {
 
   // Approval modal states
   const [selectedReq, setSelectedReq] = useState<Solicitacao | null>(null);
-  const [posicao, setPosicao] = useState('Meia');
-  const [categoria, setCategoria] = useState('Sub-15');
   const [submitting, setSubmitting] = useState(false);
+
+  // Position/category aren't chosen at approval time anymore — the athlete
+  // record still requires them (NOT NULL), so seed a default the admin can
+  // adjust later from the athlete's profile page.
+  const DEFAULT_POSICAO = 'Meia';
+  const DEFAULT_CATEGORIA = 'Sub-15';
 
   // Reject confirmation
   const [rejectingReq, setRejectingReq] = useState<Solicitacao | null>(null);
@@ -109,8 +113,8 @@ export default function AdminSolicitacoesPage() {
           .insert({
             nome: selectedReq.nome,
             data_nascimento: selectedReq.data_nascimento,
-            categoria,
-            posicao,
+            categoria: DEFAULT_CATEGORIA,
+            posicao: DEFAULT_POSICAO,
             status: 'ativo',
             telefone: selectedReq.telefone,
             endereco: selectedReq.endereco,
@@ -129,8 +133,8 @@ export default function AdminSolicitacoesPage() {
         .from('solicitacoes_cadastro')
         .update({
           status: 'aprovado',
-          posicao,
-          categoria
+          posicao: DEFAULT_POSICAO,
+          categoria: DEFAULT_CATEGORIA
         })
         .eq('id', selectedReq.id);
 
@@ -192,7 +196,7 @@ export default function AdminSolicitacoesPage() {
             <Users className="h-5 w-5 text-accent" />
             Solicitações de Cadastro
           </h2>
-          <p className="text-xs text-gray-400 mt-1">Valide e atribua categorias e posições para novos atletas.</p>
+          <p className="text-xs text-gray-400 mt-1">Aprove ou rejeite as inscrições de novos atletas.</p>
         </div>
         <div className="bg-primary/10 border border-primary/20 px-3 py-1.5 rounded-lg text-xs font-bold text-accent">
           {solicitacoes.length} pendentes
@@ -272,7 +276,7 @@ export default function AdminSolicitacoesPage() {
                   <X className="h-3.5 w-3.5" />Rejeitar
                 </button>
                 <button
-                  onClick={() => { setSelectedReq(req); setPosicao('Meia'); setCategoria('Sub-15'); }}
+                  onClick={() => setSelectedReq(req)}
                   className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold bg-accent text-neutral-dark rounded-lg hover:bg-accent/90 transition-colors"
                 >
                   <Check className="h-3.5 w-3.5" />Aprovar Atleta
@@ -288,46 +292,8 @@ export default function AdminSolicitacoesPage() {
         <div className="fixed inset-0 z-55 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 overflow-y-auto">
           <div className="glass-card w-full max-w-md p-6 border-l-4 border-l-accent space-y-4">
             <div>
-              <h3 className="text-lg font-bold text-white">Configurar e Aprovar Atleta</h3>
-              <p className="text-xs text-gray-400 mt-1">Defina a posição e a categoria de base para <strong className="text-white">{selectedReq.nome}</strong>.</p>
-            </div>
-
-            <div className="space-y-4 py-2">
-              <div>
-                <label className="block text-xs font-semibold text-gray-400 mb-1">Posição do Jogador</label>
-                <select 
-                  value={posicao} 
-                  onChange={(e) => setPosicao(e.target.value)} 
-                  className="w-full glass-input text-sm p-2 bg-neutral-dark text-white rounded-lg border border-white/10"
-                >
-                  <option value="Goleiro">Goleiro</option>
-                  <option value="Zagueiro">Zagueiro</option>
-                  <option value="Lateral Direito">Lateral Direito</option>
-                  <option value="Lateral Esquerdo">Lateral Esquerdo</option>
-                  <option value="Volante">Volante</option>
-                  <option value="Meia">Meia</option>
-                  <option value="Ponta Direita">Ponta Direita</option>
-                  <option value="Ponta Esquerda">Ponta Esquerda</option>
-                  <option value="Centroavante">Centroavante</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-gray-400 mb-1">Categoria de Base</label>
-                <select 
-                  value={categoria} 
-                  onChange={(e) => setCategoria(e.target.value)} 
-                  className="w-full glass-input text-sm p-2 bg-neutral-dark text-white rounded-lg border border-white/10"
-                >
-                  <option value="Sub-9">Sub-9</option>
-                  <option value="Sub-11">Sub-11</option>
-                  <option value="Sub-13">Sub-13</option>
-                  <option value="Sub-15">Sub-15</option>
-                  <option value="Sub-17">Sub-17</option>
-                  <option value="Sub-20">Sub-20</option>
-                  <option value="Profissional">Profissional</option>
-                </select>
-              </div>
+              <h3 className="text-lg font-bold text-white">Aprovar Atleta</h3>
+              <p className="text-xs text-gray-400 mt-1">Deseja aprovar a inscrição de <strong className="text-white">{selectedReq.nome}</strong> no sistema? A posição e a categoria de base poderão ser definidas depois, no perfil do atleta.</p>
             </div>
 
             <div className="flex justify-end gap-2 border-t border-white/5 pt-3">

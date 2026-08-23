@@ -5,7 +5,8 @@ import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
 import { supabase } from '@/lib/supabase';
 import { parseLocalDate } from '@/lib/date';
-import { 
+import { getSafeYoutubeEmbedUrl } from '@/lib/youtube';
+import {
   Users, 
   Calendar, 
   Target, 
@@ -283,8 +284,12 @@ interface TrainingExecution {
           }
         } else {
           // --- STUDENT PORTAL DATA ---
-          // 1. Resolve athlete matching user_id
-          let athleteId = 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11'; // Fallback to Lucas Silva ID
+          // 1. Resolve the athlete row linked to this account. Never fall
+          // back to querying a fixed/demo athlete id here — that would
+          // display a different real athlete's private profile (payments,
+          // evaluations, medical history) as if it were "your profile" for
+          // any account with no linked atletas row.
+          let athleteId: string | null = null;
           let matchedAthlete: StudentAthlete | null = null;
 
           if (profile?.id) {
@@ -299,150 +304,86 @@ interface TrainingExecution {
               athleteId = data.id;
             }
           }
-
-          // Fallback to local mock athlete if not found in db
-          if (!matchedAthlete) {
-            const { data, error } = await supabase
-              .from('atletas')
-              .select('*')
-              .eq('id', athleteId)
-              .single();
-
-            if (!error && data) {
-              matchedAthlete = data;
-            } else {
-              matchedAthlete = {
-                id: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
-                nome: 'Lucas Silva',
-                data_nascimento: '2011-04-12',
-                categoria: 'Sub-15',
-                posicao: 'Centroavante',
-                peso: 62.5,
-                altura: 1.72,
-                status: 'ativo',
-                foto_url: 'https://images.unsplash.com/photo-1543351611-58f69d7c1781?w=150&auto=format&fit=crop&q=80',
-                telefone: '(21) 99999-8888',
-                endereco: 'Rua das Laranjeiras, 123 - Rio de Janeiro',
-                telefone_responsavel: '(21) 98888-7777',
-                historico_medico: 'Sem alergias. Histórico de asma na infância controlada. Cartão de vacina em dia.'
-              };
-            }
-          }
           setStudentAthlete(matchedAthlete);
 
-          // 2. Fetch payments for athlete
-          const { data: paymentsData, error: paymentsError } = await supabase
-            .from('pagamentos')
-            .select('*')
-            .eq('atleta_id', athleteId)
-            .order('vencimento', { ascending: false });
-
-          if (!paymentsError && paymentsData && paymentsData.length > 0) {
-            setStudentPayments(paymentsData);
-          } else {
-            // Mock payments default fallback
-            setStudentPayments([
-              { id: 'mock-p1', tipo_plano: 'mensal', status: 'pendente', vencimento: '2026-07-05', valor: 150.00 }
-            ]);
-          }
-
-          // 3. Fetch evaluations for athlete
-          const { data: evaluationsData, error: evalsError } = await supabase
-            .from('avaliacoes')
-            .select('*')
-            .eq('atleta_id', athleteId)
-            .order('data_avaliacao', { ascending: false });
-
-          let finalEvals: StudentEvaluation[] = [];
-          if (!evalsError && evaluationsData && evaluationsData.length > 0) {
-            finalEvals = evaluationsData as StudentEvaluation[];
-          } else {
-            finalEvals = [
-              {
-                id: 'mock-e1',
-                nota_tecnica: 8.5,
-                nota_tatica: 7.5,
-                nota_fisica: 9.0,
-                nota_comportamental: 8.0,
-                observacoes: 'Excelente desempenho tático e velocidade física. Foco no posicionamento em pivô.',
-                data_avaliacao: '2026-06-06',
-              }
-            ];
-          }
-
-          try {
-            const localStr = localStorage.getItem('local_avaliacoes');
-            if (localStr) {
-              const locals = JSON.parse(localStr);
-              const filteredLocals = locals.filter((l: any) => l.atleta_id === athleteId);
-              finalEvals = [...filteredLocals, ...finalEvals];
-            }
-          } catch (e) {
-            console.error(e);
-          }
-          setStudentEvaluations(finalEvals);
-
-          // 4. Fetch personalized training for this athlete specifically
-          const { data: trainingsData, error: trainingsError } = await supabase
-            .from('treinos')
-            .select('*')
-            .eq('atleta_id', athleteId)
-            .eq('status', 'agendado')
-            .order('data_hora', { ascending: true });
-
-          if (!trainingsError && trainingsData && trainingsData.length > 0) {
-            setStudentTrainings(trainingsData);
-          } else {
-            // Mock training default fallback specifically linked to athlete
-            if (athleteId === 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11') {
-              setStudentTrainings([
-                {
-                  id: 'mock-pt1',
-                  titulo: 'Aprimoramento de Pivô e Finalização',
-                  data_hora: new Date(Date.now() + 86400000).toISOString(),
-                  local: 'Campo Auxiliar 2',
-                  categoria: matchedAthlete?.categoria || 'Sub-15',
-                  foco: 'Técnico',
-                  status: 'agendado',
-                  descricao: 'Lucas, seu foco neste treino individual é trabalhar a recepção de bola de costas para a marcação (pivô), fazendo o giro rápido sobre o zagueiro e finalizando com firmeza de perna direita. Assista ao vídeo de exemplo e preste atenção no movimento do corpo antes do chute.',
-                  youtube_url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
-                  atleta_id: athleteId
-                }
-              ]);
-            } else {
-              setStudentTrainings([]);
-            }
-          }
-
-          // Fetch weekly training plan
-          const { data: planData, error: planError } = await supabase
-            .from('planos_treino')
-            .select('*')
-            .eq('atleta_id', athleteId)
-            .eq('ativo', true)
-            .maybeSingle();
-
-          if (!planError && planData) {
-            setWeeklyPlan(planData);
-            
-            // Fetch template days
-            const { data: daysData } = await supabase
-              .from('plano_treino_dias')
-              .select('*')
-              .eq('plano_id', planData.id);
-            setPlanDays(daysData || []);
-
-            // Fetch executions
-            const { data: execsData } = await supabase
-              .from('treino_execucoes')
-              .select('*')
-              .eq('plano_id', planData.id)
-              .order('data', { ascending: true });
-            setExecutions(execsData || []);
-          } else {
+          if (!athleteId) {
+            setStudentPayments([]);
+            setStudentEvaluations([]);
+            setStudentTrainings([]);
             setWeeklyPlan(null);
             setPlanDays([]);
             setExecutions([]);
+          } else {
+            // 2. Fetch payments for athlete
+            const { data: paymentsData, error: paymentsError } = await supabase
+              .from('pagamentos')
+              .select('*')
+              .eq('atleta_id', athleteId)
+              .order('vencimento', { ascending: false });
+
+            setStudentPayments(!paymentsError && paymentsData ? paymentsData : []);
+
+            // 3. Fetch evaluations for athlete
+            const { data: evaluationsData, error: evalsError } = await supabase
+              .from('avaliacoes')
+              .select('*')
+              .eq('atleta_id', athleteId)
+              .order('data_avaliacao', { ascending: false });
+
+            let finalEvals: StudentEvaluation[] = (!evalsError && evaluationsData) ? evaluationsData as StudentEvaluation[] : [];
+
+            try {
+              const localStr = localStorage.getItem('local_avaliacoes');
+              if (localStr) {
+                const locals = JSON.parse(localStr);
+                const filteredLocals = locals.filter((l: any) => l.atleta_id === athleteId);
+                finalEvals = [...filteredLocals, ...finalEvals];
+              }
+            } catch (e) {
+              console.error(e);
+            }
+            setStudentEvaluations(finalEvals);
+
+            // 4. Fetch personalized training for this athlete specifically
+            const { data: trainingsData, error: trainingsError } = await supabase
+              .from('treinos')
+              .select('*')
+              .eq('atleta_id', athleteId)
+              .eq('status', 'agendado')
+              .order('data_hora', { ascending: true });
+
+            setStudentTrainings(!trainingsError && trainingsData ? trainingsData : []);
+
+            // Fetch weekly training plan
+            const { data: planData, error: planError } = await supabase
+              .from('planos_treino')
+              .select('*')
+              .eq('atleta_id', athleteId)
+              .eq('ativo', true)
+              .maybeSingle();
+
+            if (!planError && planData) {
+              setWeeklyPlan(planData);
+
+              // Fetch template days
+              const { data: daysData } = await supabase
+                .from('plano_treino_dias')
+                .select('*')
+                .eq('plano_id', planData.id);
+              setPlanDays(daysData || []);
+
+              // Fetch executions
+              const { data: execsData } = await supabase
+                .from('treino_execucoes')
+                .select('*')
+                .eq('plano_id', planData.id)
+                .order('data', { ascending: true });
+              setExecutions(execsData || []);
+            } else {
+              setWeeklyPlan(null);
+              setPlanDays([]);
+              setExecutions([]);
+            }
           }
         }
       } catch (err) {
@@ -504,10 +445,10 @@ interface TrainingExecution {
     );
   }
 
-  // If a non-admin's data failed to load (a thrown error, not just "no
-  // athlete found" — that case is synthesized to a mock athlete above),
-  // don't fall through to the club-wide coach dashboard below with stale
-  // placeholder numbers that don't belong to this student.
+  // A non-admin with no atletas row linked to their account (data load
+  // failed, or their profile genuinely has no linked athlete yet). Never
+  // fall through to the club-wide coach dashboard below with placeholder
+  // numbers, and never substitute a different real athlete's profile here.
   if (!isAdmin && !studentAthlete) {
     return (
       <div className="text-center py-20 text-gray-400 flex flex-col items-center justify-center space-y-3">
@@ -859,6 +800,7 @@ interface TrainingExecution {
             <div className="space-y-4">
               {studentTrainings.map((training) => {
                 const trDate = new Date(training.data_hora);
+                const safeYoutubeUrl = getSafeYoutubeEmbedUrl(training.youtube_url);
                 return (
                   <div key={training.id} className="glass-card p-5 space-y-3 relative overflow-hidden">
                     <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-primary" />
@@ -892,7 +834,7 @@ interface TrainingExecution {
                       )}
                     </div>
 
-                    {training.youtube_url && (
+                    {safeYoutubeUrl && (
                       <div className="pl-2 pt-2">
                         <span className="text-xs font-bold text-accent flex items-center gap-1.5 mb-2">
                           <Video className="h-4 w-4" />
@@ -901,9 +843,7 @@ interface TrainingExecution {
                         <div className="aspect-video max-w-lg w-full rounded-xl overflow-hidden border border-white/10 shadow-md">
                           <iframe
                             className="w-full h-full"
-                            src={training.youtube_url.includes('watch?v=') 
-                              ? `https://www.youtube.com/embed/${training.youtube_url.split('v=')[1]?.split('&')[0]}` 
-                              : training.youtube_url}
+                            src={safeYoutubeUrl}
                             title="Treino YouTube"
                             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                             allowFullScreen

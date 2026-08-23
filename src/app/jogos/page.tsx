@@ -139,7 +139,7 @@ export default function GamesPage() {
         .order('data_hora', { ascending: false });
 
       const { data: athletesData, error: athletesError } = await supabase
-        .from('atletas')
+        .from('atletas_roster')
         .select('id, nome, categoria, posicao');
 
       if (gamesError || athletesError) throw gamesError || athletesError;
