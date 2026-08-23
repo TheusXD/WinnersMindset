@@ -1,16 +1,18 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { AuthProvider, useAuth } from '@/lib/auth-context';
 import Header from '@/components/layout/Header';
 import BottomNav from '@/components/layout/BottomNav';
+import TutorialModal from '@/components/TutorialModal';
 import { Loader2 } from 'lucide-react';
 
 function AppContent({ children }: { children: React.ReactNode }) {
-  const { user, isLoading } = useAuth();
+  const { user, profile, isLoading } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
+  const [showTutorial, setShowTutorial] = useState(false);
 
   useEffect(() => {
     if (!isLoading) {
@@ -22,6 +24,32 @@ function AppContent({ children }: { children: React.ReactNode }) {
       }
     }
   }, [user, isLoading, pathname, router]);
+
+  // Show the "how to use it" tutorial once per account, right after login —
+  // gated on `profile` too so it doesn't flash the wrong role's steps while
+  // isAdmin is still resolving.
+  useEffect(() => {
+    if (!isLoading && user && profile) {
+      try {
+        if (!localStorage.getItem(`tutorial_seen_${user.id}`)) {
+          setShowTutorial(true);
+        }
+      } catch {
+        // localStorage unavailable (e.g. private mode) — just skip auto-show.
+      }
+    }
+  }, [isLoading, user, profile]);
+
+  const handleCloseTutorial = () => {
+    if (user) {
+      try {
+        localStorage.setItem(`tutorial_seen_${user.id}`, '1');
+      } catch {
+        // ignore
+      }
+    }
+    setShowTutorial(false);
+  };
 
   if (isLoading) {
     return (
@@ -38,11 +66,12 @@ function AppContent({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-full flex flex-col bg-neutral-dark text-foreground">
-      {!isAuthPage && <Header />}
+      {!isAuthPage && <Header onOpenTutorial={() => setShowTutorial(true)} />}
       <main className={`flex-1 ${isAuthPage ? 'flex items-center justify-center' : 'pb-24 md:pb-28 px-4 pt-4 max-w-7xl mx-auto w-full'}`}>
         {children}
       </main>
       {!isAuthPage && <BottomNav />}
+      {!isAuthPage && showTutorial && <TutorialModal onClose={handleCloseTutorial} />}
     </div>
   );
 }
