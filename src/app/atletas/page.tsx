@@ -2,9 +2,10 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Search, Plus, UserPlus, Filter, ShieldAlert, ArrowUpRight } from 'lucide-react';
+import { Search, Plus, UserPlus, Filter, ShieldAlert, ArrowUpRight, Upload } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { supabase } from '@/lib/supabase';
+import { fileToOptimizedDataUrl } from '@/lib/image-upload';
 
 // Matches the public.atletas_roster view (non-sensitive columns only) —
 // this page never needs CPF/RG/medical/contact fields, just the roster.
@@ -263,15 +264,61 @@ export default function AthletesPage() {
                 onChange={(e) => setNewAthlete({ ...newAthlete, endereco: e.target.value })}
               />
             </div>
-            <div className="sm:col-span-2 lg:col-span-3">
-              <label className="block text-xs font-semibold text-gray-400 mb-1">Link da Foto de Perfil (URL)</label>
-              <input
-                type="text"
-                className="w-full glass-input"
-                placeholder="Ex: https://images.unsplash.com/... (ou deixe em branco para foto padrão)"
-                value={newAthlete.foto_url}
-                onChange={(e) => setNewAthlete({ ...newAthlete, foto_url: e.target.value })}
-              />
+            <div className="sm:col-span-2 lg:col-span-3 space-y-2">
+              <label className="block text-xs font-semibold text-gray-400">Foto de Perfil</label>
+              <div className="flex items-center gap-3">
+                {newAthlete.foto_url ? (
+                  <img src={newAthlete.foto_url} alt="Preview" className="h-12 w-12 rounded-full object-cover border border-accent/40 flex-shrink-0" />
+                ) : (
+                  <div className="h-12 w-12 rounded-full bg-neutral-dark border border-white/10 flex items-center justify-center text-[10px] text-gray-400 flex-shrink-0">
+                    Padrão
+                  </div>
+                )}
+                <div className="flex-1 space-y-1.5">
+                  <div className="flex items-center gap-2">
+                    <label
+                      htmlFor="new-athlete-photo-file"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent/10 border border-accent/30 text-accent text-xs font-bold hover:bg-accent/20 cursor-pointer transition-colors"
+                    >
+                      <Upload className="h-3.5 w-3.5" />
+                      Escolher do Computador
+                    </label>
+                    <input
+                      id="new-athlete-photo-file"
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={async (e) => {
+                        const f = e.target.files?.[0];
+                        if (f) {
+                          try {
+                            const b64 = await fileToOptimizedDataUrl(f, 600, 600, 0.85);
+                            setNewAthlete(prev => ({ ...prev, foto_url: b64 }));
+                          } catch (err: any) {
+                            alert('Erro ao carregar foto: ' + (err?.message || ''));
+                          }
+                        }
+                      }}
+                    />
+                    {newAthlete.foto_url && (
+                      <button
+                        type="button"
+                        onClick={() => setNewAthlete(prev => ({ ...prev, foto_url: '' }))}
+                        className="text-[11px] text-red-400 hover:text-red-300 font-semibold"
+                      >
+                        Limpar
+                      </button>
+                    )}
+                  </div>
+                  <input
+                    type="text"
+                    className="w-full glass-input text-xs"
+                    placeholder="Ou cole a URL da foto (ou deixe em branco para foto padrão)"
+                    value={newAthlete.foto_url}
+                    onChange={(e) => setNewAthlete({ ...newAthlete, foto_url: e.target.value })}
+                  />
+                </div>
+              </div>
             </div>
             <div className="sm:col-span-2 lg:col-span-3">
               <label className="block text-xs font-semibold text-gray-400 mb-1">Histórico Médico / Alergias / Observações Clínicas</label>

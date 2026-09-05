@@ -28,8 +28,11 @@ import {
   Dumbbell,
   Lock,
   Check,
-  CheckCircle
+  CheckCircle,
+  Camera,
+  Upload
 } from 'lucide-react';
+import { fileToOptimizedDataUrl } from '@/lib/image-upload';
 import {
   Radar,
   RadarChart,
@@ -61,7 +64,7 @@ interface UpcomingActivity {
 }
 
 export default function Dashboard() {
-  const { profile, isAdmin } = useAuth();
+  const { profile, isAdmin, user } = useAuth();
   const [mounted, setMounted] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -163,13 +166,33 @@ interface TrainingExecution {
   created_at: string;
 }
 
+interface WeeklyAthleteWorkout {
+  id: string;
+  atleta_id: string;
+  dia_semana: 'segunda' | 'terca' | 'quarta' | 'quinta' | 'sexta' | 'sabado' | 'domingo';
+  titulo: string;
+  conteudo: string;
+  concluido: boolean;
+  concluido_em: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
   // Student States
   const [studentAthlete, setStudentAthlete] = useState<StudentAthlete | null>(null);
   const [studentPayments, setStudentPayments] = useState<StudentPayment[]>([]);
   const [studentEvaluations, setStudentEvaluations] = useState<StudentEvaluation[]>([]);
   const [studentTrainings, setStudentTrainings] = useState<StudentTraining[]>([]);
 
-  // Weekly Training Plan States
+  // Flexible Weekly Workouts States
+  const [weeklyWorkouts, setWeeklyWorkouts] = useState<WeeklyAthleteWorkout[]>([]);
+  const [updatingWorkoutId, setUpdatingWorkoutId] = useState<string | null>(null);
+
+  // Student Photo Upload States
+  const [uploadingStudentPhoto, setUploadingStudentPhoto] = useState(false);
+  const studentPhotoInputRef = React.useRef<HTMLInputElement>(null);
+
+  // Weekly Training Plan States (Legacy)
   const [weeklyPlan, setWeeklyPlan] = useState<WeeklyTrainingPlan | null>(null);
   const [planDays, setPlanDays] = useState<WeeklyTrainingPlanDay[]>([]);
   const [executions, setExecutions] = useState<TrainingExecution[]>([]);
@@ -384,6 +407,15 @@ interface TrainingExecution {
               setPlanDays([]);
               setExecutions([]);
             }
+
+            // Fetch flexible weekly workouts
+            const { data: weekWorkoutsData } = await supabase
+              .from('treinos_semana_atleta')
+              .select('*')
+              .eq('atleta_id', athleteId)
+              .order('created_at', { ascending: true });
+
+            setWeeklyWorkouts(weekWorkoutsData || []);
           }
         }
       } catch (err) {
@@ -394,11 +426,66 @@ interface TrainingExecution {
     }
 
     fetchDashboardData();
-    // profile is replaced with a new object on every auth event (including
-    // silent token refreshes), which would otherwise re-run this whole fetch
-    // and flash the dashboard back to the loading spinner. Key off the
-    // actual user id instead.
   }, [isAdmin, profile?.id]);
+
+  const handleStudentPhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !studentAthlete) return;
+
+    try {
+      setUploadingStudentPhoto(true);
+      const optimizedDataUrl = await fileToOptimizedDataUrl(file, 600, 600, 0.85);
+
+      const { error } = await supabase
+        .from('atletas')
+        .update({ foto_url: optimizedDataUrl })
+        .eq('id', studentAthlete.id);
+
+      if (error) throw error;
+
+      if (user?.id) {
+        await supabase
+          .from('perfis_usuarios')
+          .update({ foto_url: optimizedDataUrl })
+          .eq('id', user.id);
+      }
+
+      setStudentAthlete(prev => prev ? { ...prev, foto_url: optimizedDataUrl } : null);
+    } catch (err: any) {
+      console.error('Erro ao atualizar foto:', err);
+      alert('Erro ao atualizar foto: ' + (err?.message || ''));
+    } finally {
+      setUploadingStudentPhoto(false);
+      if (studentPhotoInputRef.current) studentPhotoInputRef.current.value = '';
+    }
+  };
+
+  const handleToggleWeeklyWorkout = async (workoutId: string, currentStatus: boolean) => {
+    try {
+      setUpdatingWorkoutId(workoutId);
+      const nextStatus = !currentStatus;
+      const { error } = await supabase
+        .from('treinos_semana_atleta')
+        .update({
+          concluido: nextStatus,
+          concluido_em: nextStatus ? new Date().toISOString() : null,
+        })
+        .eq('id', workoutId);
+
+      if (error) throw error;
+
+      setWeeklyWorkouts(prev => prev.map(w => w.id === workoutId ? {
+        ...w,
+        concluido: nextStatus,
+        concluido_em: nextStatus ? new Date().toISOString() : null
+      } : w));
+    } catch (err: any) {
+      console.error('Erro ao marcar treino da semana:', err);
+      alert('Erro ao marcar treino.');
+    } finally {
+      setUpdatingWorkoutId(null);
+    }
+  };
 
   const handleToggleExecution = async (execId: string, currentStatus: boolean) => {
     const exec = executions.find(e => e.id === execId);
@@ -499,6 +586,33 @@ interface TrainingExecution {
       return mapping[day] || 'segunda';
     };
 
+    const WEEKDAY_KEYS = ['segunda', 'terca', 'quarta', 'quinta', 'sexta', 'sabado', 'domingo'] as const;
+    const WEEKDAY_LABELS: Record<string, string> = {
+      segunda: 'Segunda-feira',
+      terca: 'Terça-feira',
+      quarta: 'Quarta-feira',
+      quinta: 'Quinta-feira',
+      sexta: 'Sexta-feira',
+      sabado: 'Sábado',
+      domingo: 'Domingo',
+    };
+
+    const currentDayNum = new Date().getDay();
+    const currentDayKeyMap: Record<number, 'segunda' | 'terca' | 'quarta' | 'quinta' | 'sexta' | 'sabado' | 'domingo'> = {
+      0: 'domingo',
+      1: 'segunda',
+      2: 'terca',
+      3: 'quarta',
+      4: 'quinta',
+      5: 'sexta',
+      6: 'sabado',
+    };
+    const todayFlexibleWeekdayKey = currentDayKeyMap[currentDayNum];
+    const todayFlexibleWorkout = weeklyWorkouts.find(w => w.dia_semana === todayFlexibleWeekdayKey);
+    const totalWeeklyWorkouts = weeklyWorkouts.length;
+    const completedWeeklyWorkouts = weeklyWorkouts.filter(w => w.concluido).length;
+    const weeklyWorkoutsProgress = totalWeeklyWorkouts > 0 ? Math.round((completedWeeklyWorkouts / totalWeeklyWorkouts) * 100) : 0;
+
     const nextPayment = studentPayments[0] || {
       tipo_plano: 'mensal',
       status: 'pendente',
@@ -533,12 +647,55 @@ interface TrainingExecution {
         {/* Welcome Athlete Banner */}
         <div className="glass-card p-6 flex flex-col md:flex-row items-center md:items-start gap-6 relative overflow-hidden bg-gradient-to-r from-primary-dark/80 to-primary/30">
           <div className="absolute right-0 top-0 -mr-6 -mt-6 h-36 w-36 rounded-full bg-accent/10 blur-2xl pointer-events-none" />
-          <div className="relative h-28 w-28 rounded-full overflow-hidden border-2 border-accent bg-neutral-dark flex-shrink-0">
-            {studentAthlete.foto_url ? (
-              <img src={studentAthlete.foto_url} alt={studentAthlete.nome} className="h-full w-full object-cover" />
-            ) : (
-              <div className="h-full w-full flex items-center justify-center text-gray-500">Sem Foto</div>
-            )}
+          <div className="flex flex-col items-center gap-1.5 flex-shrink-0">
+            <div className="relative group h-28 w-28 rounded-full overflow-hidden border-2 border-accent bg-neutral-dark shadow-md">
+              {studentAthlete.foto_url ? (
+                <img src={studentAthlete.foto_url} alt={studentAthlete.nome} className="h-full w-full object-cover" />
+              ) : (
+                <div className="h-full w-full flex items-center justify-center text-gray-500 text-xs">Sem Foto</div>
+              )}
+              <label
+                htmlFor="student-avatar-file-input"
+                className="absolute inset-0 bg-black/65 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center cursor-pointer text-white text-center p-1"
+                title="Escolher foto do computador"
+              >
+                {uploadingStudentPhoto ? (
+                  <Loader2 className="h-5 w-5 text-accent animate-spin" />
+                ) : (
+                  <>
+                    <Camera className="h-5 w-5 text-accent mb-0.5" />
+                    <span className="text-[9px] font-bold">Alterar Foto</span>
+                  </>
+                )}
+              </label>
+            </div>
+            <input
+              id="student-avatar-file-input"
+              ref={studentPhotoInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleStudentPhotoChange}
+              disabled={uploadingStudentPhoto}
+            />
+            <button
+              type="button"
+              onClick={() => studentPhotoInputRef.current?.click()}
+              disabled={uploadingStudentPhoto}
+              className="inline-flex items-center gap-1 text-[11px] text-accent hover:text-accent/80 font-semibold transition-colors"
+            >
+              {uploadingStudentPhoto ? (
+                <>
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  Salvando...
+                </>
+              ) : (
+                <>
+                  <Upload className="h-3 w-3" />
+                  Escolher Foto
+                </>
+              )}
+            </button>
           </div>
           <div className="flex-1 text-center md:text-left space-y-2">
             <span className="inline-flex items-center rounded-md bg-accent/20 px-2.5 py-0.5 text-xs font-medium text-accent ring-1 ring-inset ring-accent/30">
@@ -599,53 +756,44 @@ interface TrainingExecution {
           )}
         </div>
 
-        {/* --- SISTEMA DE TREINAMENTO SEMANAL (ALUNO) --- */}
-        <div className="grid md:grid-cols-2 gap-6">
-          {/* Meu Treino de Hoje */}
-          <div className="glass-card p-6 space-y-4">
-            <h3 className="text-base font-bold text-white flex items-center border-b border-white/5 pb-2">
-              <Dumbbell className="h-5 w-5 text-accent mr-2" />
-              Meu Treino de Hoje
-            </h3>
+        {/* --- SISTEMA DE TREINAMENTO DA SEMANA (ALUNO) --- */}
+        <div className="space-y-6">
+          <div className="grid md:grid-cols-2 gap-6">
+            {/* Meu Treino de Hoje */}
+            <div className="glass-card p-6 space-y-4">
+              <div className="flex items-center justify-between border-b border-white/5 pb-2">
+                <h3 className="text-base font-bold text-white flex items-center">
+                  <Dumbbell className="h-5 w-5 text-accent mr-2" />
+                  Meu Treino de Hoje
+                </h3>
+                <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-accent/20 text-accent font-bold uppercase tracking-wider">
+                  {WEEKDAY_LABELS[todayFlexibleWeekdayKey]}
+                </span>
+              </div>
 
-            {!weeklyPlan ? (
-              <div className="py-6 text-center text-xs text-gray-500 bg-neutral-dark/20 rounded-xl border border-dashed border-white/10">
-                Nenhum plano de treino semanal ativo no momento. Aguarde o planejamento do seu professor!
-              </div>
-            ) : isWeekend ? (
-              <div className="py-6 text-center text-xs text-gray-400 bg-neutral-dark/25 rounded-xl border border-white/5 space-y-2">
-                <Clock className="h-8 w-8 text-accent mx-auto animate-pulse" />
-                <p className="font-bold text-white">Fim de Semana &mdash; Descanso</p>
-                <p className="text-[11px] text-gray-500">Aproveite sábado e domingo para recuperar as energias!</p>
-              </div>
-            ) : !isActivePlan ? (
-              <div className="py-6 text-center text-xs text-gray-500 bg-neutral-dark/20 rounded-xl border border-dashed border-white/10">
-                Fora do período do plano de treino ativo ({new Date(weeklyPlan.data_inicio + 'T00:00').toLocaleDateString('pt-BR')} até {new Date(weeklyPlan.data_fim + 'T00:00').toLocaleDateString('pt-BR')}).
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <div className="p-4 bg-neutral-dark/45 rounded-xl border border-white/5 space-y-2">
-                  <span className="text-[10px] text-accent font-bold uppercase tracking-wider block">
-                    Exercícios de {todayWeekdayName === 'segunda' ? 'Segunda-feira' : todayWeekdayName === 'terca' ? 'Terça-feira' : todayWeekdayName === 'quarta' ? 'Quarta-feira' : todayWeekdayName === 'quinta' ? 'Quinta-feira' : 'Sexta-feira'}
-                  </span>
-                  <p className="text-xs text-gray-200 leading-relaxed whitespace-pre-wrap">
-                    {todayExercises || 'Nenhum exercício planejado para hoje.'}
-                  </p>
-                </div>
+              {todayFlexibleWorkout ? (
+                <div className="space-y-4">
+                  <div className="p-4 bg-neutral-dark/50 rounded-xl border border-white/5 space-y-2.5">
+                    <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                      {todayFlexibleWorkout.titulo}
+                    </h4>
+                    <p className="text-xs text-gray-200 leading-relaxed whitespace-pre-wrap">
+                      {todayFlexibleWorkout.conteudo}
+                    </p>
+                  </div>
 
-                {todayExecution && (
                   <button
-                    onClick={() => handleToggleExecution(todayExecution.id, todayExecution.concluido)}
-                    disabled={completingExecId !== null}
-                    className={`w-full py-3.5 px-4 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 ${
-                      todayExecution.concluido
+                    onClick={() => handleToggleWeeklyWorkout(todayFlexibleWorkout.id, todayFlexibleWorkout.concluido)}
+                    disabled={updatingWorkoutId === todayFlexibleWorkout.id}
+                    className={`w-full py-3.5 px-4 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 shadow-md ${
+                      todayFlexibleWorkout.concluido
                         ? 'bg-accent text-neutral-dark hover:bg-accent/90'
                         : 'bg-neutral-dark border border-accent/30 text-accent hover:bg-accent/10'
                     }`}
                   >
-                    {completingExecId === todayExecution.id ? (
+                    {updatingWorkoutId === todayFlexibleWorkout.id ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : todayExecution.concluido ? (
+                    ) : todayFlexibleWorkout.concluido ? (
                       <>
                         <Check className="h-4 w-4 stroke-[3px]" />
                         TREINO CONCLUÍDO! (Clique para desmarcar)
@@ -657,133 +805,178 @@ interface TrainingExecution {
                       </>
                     )}
                   </button>
-                )}
-              </div>
-            )}
-          </div>
+                </div>
+              ) : weeklyWorkouts.length > 0 ? (
+                <div className="py-8 text-center text-xs text-gray-400 bg-neutral-dark/25 rounded-xl border border-white/5 space-y-2">
+                  <Clock className="h-7 w-7 text-accent mx-auto animate-pulse" />
+                  <p className="font-bold text-white">Sem treino específico para hoje ({WEEKDAY_LABELS[todayFlexibleWeekdayKey]})</p>
+                  <p className="text-[11px] text-gray-500">
+                    Aproveite para descansar ou confira a programação dos outros dias da semana abaixo!
+                  </p>
+                </div>
+              ) : (
+                <div className="py-8 text-center text-xs text-gray-500 bg-neutral-dark/20 rounded-xl border border-dashed border-white/10">
+                  Nenhum treino adicionado pelo seu professor para esta semana ainda. Aguarde as orientações!
+                </div>
+              )}
+            </div>
 
-          {/* Meu Progresso Semanal */}
-          <div className="glass-card p-6 space-y-4">
-            <h3 className="text-base font-bold text-white flex items-center border-b border-white/5 pb-2">
-              <TrendingUp className="h-5 w-5 text-accent mr-2" />
-              Meu Progresso de Treino
-            </h3>
+            {/* Resumo da Semana */}
+            <div className="glass-card p-6 space-y-4">
+              <h3 className="text-base font-bold text-white flex items-center border-b border-white/5 pb-2">
+                <TrendingUp className="h-5 w-5 text-accent mr-2" />
+                Progresso Semanal
+              </h3>
 
-            {weeklyPlan && totalExecs > 0 ? (
-              <div className="space-y-4">
-                <div className="flex flex-col sm:flex-row items-center justify-center gap-6 bg-neutral-dark/20 p-4 rounded-xl border border-white/5">
-                  {/* Doughnut Chart */}
-                  <div className="relative w-36 h-36 flex-shrink-0 flex items-center justify-center">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie
-                          data={[
-                            { name: 'Concluídos', value: completedExecs },
-                            { name: 'Pendentes', value: totalExecs - completedExecs }
-                          ]}
-                          cx="50%"
-                          cy="50%"
-                          innerRadius={46}
-                          outerRadius={58}
-                          startAngle={90}
-                          endAngle={-270}
-                          paddingAngle={3}
-                          dataKey="value"
-                        >
-                          <Cell fill="#20c997" />
-                          <Cell fill="rgba(255, 255, 255, 0.08)" />
-                        </Pie>
-                      </PieChart>
-                    </ResponsiveContainer>
-                    <div className="absolute flex flex-col items-center justify-center text-center">
-                      <span className="text-2xl font-black text-white leading-none">{progressPercent}%</span>
-                      <span className="text-[9px] text-accent font-bold uppercase tracking-wider mt-1">Concluído</span>
-                    </div>
-                  </div>
-
-                  {/* Stats Details */}
-                  <div className="flex-1 w-full space-y-2.5">
-                    <div className="space-y-1">
-                      <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Resumo do Período</span>
-                      <div className="flex justify-between items-center text-xs">
-                        <span className="text-gray-400">Total de Treinos:</span>
-                        <span className="font-bold text-white">{totalExecs} {totalExecs === 1 ? 'dia' : 'dias'}</span>
-                      </div>
-                      <div className="flex justify-between items-center text-xs">
-                        <span className="text-gray-400">Dias Treinados:</span>
-                        <span className="font-bold text-accent">{completedExecs} {completedExecs === 1 ? 'dia' : 'dias'}</span>
-                      </div>
-                      <div className="flex justify-between items-center text-xs">
-                        <span className="text-gray-400">Restantes:</span>
-                        <span className="font-bold text-gray-400">{totalExecs - completedExecs} {totalExecs - completedExecs === 1 ? 'dia' : 'dias'}</span>
+              {totalWeeklyWorkouts > 0 ? (
+                <div className="space-y-4">
+                  <div className="flex flex-col sm:flex-row items-center justify-center gap-6 bg-neutral-dark/20 p-4 rounded-xl border border-white/5">
+                    {/* Doughnut */}
+                    <div className="relative w-32 h-32 flex-shrink-0 flex items-center justify-center">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={[
+                              { name: 'Concluídos', value: completedWeeklyWorkouts },
+                              { name: 'Pendentes', value: totalWeeklyWorkouts - completedWeeklyWorkouts }
+                            ]}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={40}
+                            outerRadius={50}
+                            startAngle={90}
+                            endAngle={-270}
+                            paddingAngle={3}
+                            dataKey="value"
+                          >
+                            <Cell fill="#20c997" />
+                            <Cell fill="rgba(255, 255, 255, 0.08)" />
+                          </Pie>
+                        </PieChart>
+                      </ResponsiveContainer>
+                      <div className="absolute flex flex-col items-center justify-center text-center">
+                        <span className="text-xl font-black text-white leading-none">{weeklyWorkoutsProgress}%</span>
+                        <span className="text-[8px] text-accent font-bold uppercase tracking-wider mt-0.5">Concluído</span>
                       </div>
                     </div>
-                    
-                    {/* Linear Progress Bar below the text as a nice accent */}
-                    <div className="w-full h-1.5 bg-neutral-dark/65 rounded-full overflow-hidden border border-white/5">
-                      <div 
-                        className="h-full bg-accent transition-all duration-500 rounded-full" 
-                        style={{ width: `${progressPercent}%` }}
-                      />
+
+                    <div className="flex-1 w-full space-y-2">
+                      <div className="space-y-1">
+                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Resumo Semanal</span>
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="text-gray-400">Total de Treinos:</span>
+                          <span className="font-bold text-white">{totalWeeklyWorkouts} {totalWeeklyWorkouts === 1 ? 'dia' : 'dias'}</span>
+                        </div>
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="text-gray-400">Concluídos:</span>
+                          <span className="font-bold text-accent">{completedWeeklyWorkouts} {completedWeeklyWorkouts === 1 ? 'dia' : 'dias'}</span>
+                        </div>
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="text-gray-400">Pendentes:</span>
+                          <span className="font-bold text-gray-400">{totalWeeklyWorkouts - completedWeeklyWorkouts} {totalWeeklyWorkouts - completedWeeklyWorkouts === 1 ? 'dia' : 'dias'}</span>
+                        </div>
+                      </div>
+
+                      <div className="w-full h-1.5 bg-neutral-dark/65 rounded-full overflow-hidden border border-white/5">
+                        <div 
+                          className="h-full bg-accent transition-all duration-500 rounded-full" 
+                          style={{ width: `${weeklyWorkoutsProgress}%` }}
+                        />
+                      </div>
                     </div>
                   </div>
                 </div>
+              ) : (
+                <div className="py-8 text-center text-xs text-gray-500 bg-neutral-dark/20 rounded-xl border border-dashed border-white/10">
+                  Nenhum treino disponível para calcular progresso no momento.
+                </div>
+              )}
+            </div>
+          </div>
 
-                {/* Calendar grid */}
-                <div className="space-y-3 pt-2">
-                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Calendário de Checks</span>
-                  <div className="grid grid-cols-1 gap-2 max-h-48 overflow-y-auto pr-1">
-                    {Array.from({ length: Math.ceil(executions.length / 5) }).map((_, weekIndex) => {
-                      const weekExecs = executions.slice(weekIndex * 5, (weekIndex * 5) + 5);
-                      return (
-                        <div key={weekIndex} className="p-2 bg-neutral-dark/30 rounded-lg border border-white/5 flex items-center justify-between">
-                          <span className="text-[9px] text-gray-500 font-bold font-mono">Semana {weekIndex + 1}</span>
-                          <div className="flex gap-1.5">
-                            {weekExecs.map((exec) => {
-                              const dateObj = new Date(exec.data + 'T00:00:00');
-                              const dayInitName = getWeekdayName(exec.data).substring(0, 3).toUpperCase();
-                              const isToday = exec.data === todayStr;
-                              const isFuture = exec.data > todayStr;
-                              return (
+          {/* Programação Completa dos Dias da Semana */}
+          {weeklyWorkouts.length > 0 && (
+            <div className="glass-card p-6 space-y-4">
+              <div className="border-b border-white/5 pb-2">
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  <Calendar className="h-5 w-5 text-accent" />
+                  Programação da Semana
+                </h3>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  Veja todos os treinos que seu professor preparou para cada dia
+                </p>
+              </div>
+
+              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {WEEKDAY_KEYS.map((key) => {
+                  const dayWorkouts = weeklyWorkouts.filter(w => w.dia_semana === key);
+                  const isToday = key === todayFlexibleWeekdayKey;
+                  return (
+                    <div 
+                      key={key} 
+                      className={`p-4 rounded-xl border transition-all ${
+                        isToday 
+                          ? 'bg-primary/20 border-accent/40 shadow-lg' 
+                          : 'bg-neutral-dark/40 border-white/5'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between border-b border-white/5 pb-2 mb-2">
+                        <span className={`text-xs font-bold uppercase tracking-wider ${isToday ? 'text-accent' : 'text-gray-300'}`}>
+                          {WEEKDAY_LABELS[key]}
+                        </span>
+                        {isToday && (
+                          <span className="text-[9px] px-2 py-0.5 rounded-full bg-accent text-neutral-dark font-black">
+                            HOJE
+                          </span>
+                        )}
+                      </div>
+
+                      {dayWorkouts.length === 0 ? (
+                        <p className="text-xs text-gray-500 italic py-2">Descanso / Sem treino</p>
+                      ) : (
+                        <div className="space-y-3">
+                          {dayWorkouts.map((workout) => (
+                            <div key={workout.id} className="space-y-2 bg-black/20 p-3 rounded-lg border border-white/5">
+                              <div className="flex items-start justify-between gap-2">
+                                <h5 className="text-xs font-bold text-white">{workout.titulo}</h5>
                                 <button
-                                  key={exec.id}
-                                  disabled={isFuture || completingExecId !== null}
-                                  onClick={() => handleToggleExecution(exec.id, exec.concluido)}
-                                  title={`${dateObj.toLocaleDateString('pt-BR')} - ${exec.concluido ? 'Concluído' : isFuture ? 'Futuro (bloqueado)' : 'Pendente'}`}
-                                  className={`h-9 w-9 flex flex-col items-center justify-center rounded-lg border text-center transition-all ${
-                                    exec.concluido
-                                      ? 'bg-accent/15 border-accent/40 text-accent font-bold'
-                                      : isToday
-                                        ? 'bg-primary/20 border-primary-light text-white ring-1 ring-accent'
-                                        : isFuture
-                                          ? 'bg-neutral-dark/20 border-white/5 opacity-40 text-gray-600 cursor-not-allowed'
-                                          : 'bg-neutral-dark/40 border-white/10 text-gray-400 hover:bg-neutral-dark/60 hover:border-white/20'
+                                  type="button"
+                                  onClick={() => handleToggleWeeklyWorkout(workout.id, workout.concluido)}
+                                  disabled={updatingWorkoutId === workout.id}
+                                  title={workout.concluido ? 'Marcar como pendente' : 'Marcar como concluído'}
+                                  className={`p-1 rounded-md border text-[10px] font-bold transition-colors flex-shrink-0 ${
+                                    workout.concluido
+                                      ? 'bg-accent text-neutral-dark border-accent hover:bg-accent/80'
+                                      : 'bg-neutral-dark text-gray-400 border-white/10 hover:text-white'
                                   }`}
                                 >
-                                  <span className="text-[7px] font-black">{dayInitName}</span>
-                                  {exec.concluido ? (
-                                    <Check className="h-3 w-3 mt-0.5" />
-                                  ) : isFuture ? (
-                                    <Lock className="h-2.5 w-2.5 mt-0.5 text-gray-600" />
+                                  {updatingWorkoutId === workout.id ? (
+                                    <Loader2 className="h-3 w-3 animate-spin" />
                                   ) : (
-                                    <span className="text-[7.5px] font-mono mt-0.5">{dateObj.getDate()}</span>
+                                    <Check className="h-3 w-3" />
                                   )}
                                 </button>
-                              );
-                            })}
-                          </div>
+                              </div>
+                              <p className="text-[11px] text-gray-300 whitespace-pre-wrap leading-relaxed">
+                                {workout.conteudo}
+                              </p>
+                              <div className="pt-1 text-[9px] text-gray-500 font-mono">
+                                {workout.concluido ? (
+                                  <span className="text-accent font-bold">✓ Concluído</span>
+                                ) : (
+                                  <span>Pendente</span>
+                                )}
+                              </div>
+                            </div>
+                          ))}
                         </div>
-                      );
-                    })}
-                  </div>
-                </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
-            ) : (
-              <div className="py-6 text-center text-xs text-gray-500 bg-neutral-dark/20 rounded-xl border border-dashed border-white/10">
-                Nenhum progresso disponível no momento.
-              </div>
-            )}
-          </div>
+            </div>
+          )}
         </div>
 
         {/* Training Schedule with YouTube embed */}

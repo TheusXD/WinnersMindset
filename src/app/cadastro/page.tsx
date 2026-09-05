@@ -166,6 +166,8 @@ export default function CadastroPage() {
       const msg = (err as Error).message || '';
       if (msg.toLowerCase().includes('already registered') || msg.toLowerCase().includes('already exists')) {
         setError('Este e-mail já está cadastrado no sistema. Tente fazer login ou use outro e-mail.');
+      } else if (msg.toLowerCase().includes('failed to fetch') || msg.toLowerCase().includes('network') || msg.toLowerCase().includes('load failed')) {
+        setError('Não foi possível conectar ao servidor (Supabase). Verifique sua conexão ou se o projeto no Supabase está ativo/pausado.');
       } else {
         setError(msg || 'Ocorreu um erro ao enviar seu cadastro.');
       }

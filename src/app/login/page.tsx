@@ -96,6 +96,8 @@ export default function LoginPage() {
       const msg = (err as Error).message || '';
       if (msg.includes('Invalid login credentials')) {
         setError('E-mail/telefone ou senha incorretos. Verifique e tente novamente.');
+      } else if (msg.toLowerCase().includes('failed to fetch') || msg.toLowerCase().includes('network') || msg.toLowerCase().includes('load failed')) {
+        setError('Não foi possível conectar ao servidor (Supabase). Verifique sua conexão com a internet ou se o projeto no Supabase está ativo/pausado.');
       } else {
         setError(msg || 'Erro ao realizar login.');
       }
@@ -115,7 +117,12 @@ export default function LoginPage() {
       if (resetError) throw resetError;
       setView('forgot-success');
     } catch (err) {
-      setForgotError((err as Error).message || 'Erro ao enviar e-mail. Tente novamente.');
+      const msg = (err as Error).message || '';
+      if (msg.toLowerCase().includes('failed to fetch') || msg.toLowerCase().includes('network') || msg.toLowerCase().includes('load failed')) {
+        setForgotError('Não foi possível conectar ao servidor. Verifique se o projeto no Supabase está ativo.');
+      } else {
+        setForgotError(msg || 'Erro ao enviar e-mail. Tente novamente.');
+      }
     } finally {
       setForgotLoading(false);
     }

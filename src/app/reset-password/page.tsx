@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import React, { useState, useEffect } from 'react';
 import Image from 'next/image';
@@ -66,7 +66,12 @@ export default function ResetPasswordPage() {
       if (updateError) throw updateError;
       setPageState('success');
     } catch (err) {
-      setError((err as Error).message || 'Erro ao redefinir senha. Tente novamente.');
+      const msg = (err as Error).message || '';
+      if (msg.toLowerCase().includes('failed to fetch') || msg.toLowerCase().includes('network') || msg.toLowerCase().includes('load failed')) {
+        setError('Não foi possível conectar ao servidor. Verifique se o projeto no Supabase está ativo.');
+      } else {
+        setError(msg || 'Erro ao redefinir senha. Tente novamente.');
+      }
     } finally {
       setLoading(false);
     }

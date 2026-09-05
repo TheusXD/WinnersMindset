@@ -31,8 +31,10 @@ import {
   Dumbbell,
   Trash2,
   Lock,
-  Check
+  Check,
+  Camera
 } from 'lucide-react';
+import { fileToOptimizedDataUrl } from '@/lib/image-upload';
 import {
   Radar,
   RadarChart,
@@ -125,6 +127,18 @@ interface TrainingExecution {
   concluido: boolean;
   concluido_em: string | null;
   created_at: string;
+}
+
+export interface WeeklyAthleteWorkout {
+  id: string;
+  atleta_id: string;
+  dia_semana: 'segunda' | 'terca' | 'quarta' | 'quinta' | 'sexta' | 'sabado' | 'domingo';
+  titulo: string;
+  conteudo: string;
+  concluido: boolean;
+  concluido_em: string | null;
+  created_at?: string;
+  updated_at?: string;
 }
 
 const DEFAULT_ATHLETE: Athlete = {
@@ -225,6 +239,163 @@ export default function AthleteDetailPage() {
   const [savingTraining, setSavingTraining] = useState(false);
   const [uploadingFile, setUploadingFile] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+
+  // Flexible Weekly Workouts States
+  const [weeklyWorkouts, setWeeklyWorkouts] = useState<WeeklyAthleteWorkout[]>([]);
+  const [workoutModalOpen, setWorkoutModalOpen] = useState(false);
+  const [editingWorkout, setEditingWorkout] = useState<WeeklyAthleteWorkout | null>(null);
+  const [workoutForm, setWorkoutForm] = useState({
+    dia_semana: 'segunda' as 'segunda' | 'terca' | 'quarta' | 'quinta' | 'sexta' | 'sabado' | 'domingo',
+    titulo: '',
+    conteudo: '',
+  });
+  const [savingWorkout, setSavingWorkout] = useState(false);
+
+  // Photo upload from computer states
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const photoInputRef = React.useRef<HTMLInputElement>(null);
+
+  const handlePhotoFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !athlete) return;
+
+    try {
+      setUploadingPhoto(true);
+      const optimizedDataUrl = await fileToOptimizedDataUrl(file, 600, 600, 0.85);
+
+      const { error } = await supabase
+        .from('atletas')
+        .update({ foto_url: optimizedDataUrl })
+        .eq('id', athlete.id);
+
+      if (error) throw error;
+
+      if (athlete.usuario_id) {
+        await supabase
+          .from('perfis_usuarios')
+          .update({ foto_url: optimizedDataUrl })
+          .eq('id', athlete.usuario_id);
+      }
+
+      setAthlete(prev => prev ? { ...prev, foto_url: optimizedDataUrl } : null);
+      setEditAthlete(prev => ({ ...prev, foto_url: optimizedDataUrl }));
+    } catch (err: any) {
+      console.error('Erro ao atualizar foto:', err);
+      alert('Erro ao carregar a foto: ' + (err?.message || 'Erro desconhecido'));
+    } finally {
+      setUploadingPhoto(false);
+      if (photoInputRef.current) photoInputRef.current.value = '';
+    }
+  };
+
+  const handleOpenAddWorkout = (preselectedDay?: 'segunda' | 'terca' | 'quarta' | 'quinta' | 'sexta' | 'sabado' | 'domingo') => {
+    setEditingWorkout(null);
+    setWorkoutForm({
+      dia_semana: preselectedDay || 'segunda',
+      titulo: '',
+      conteudo: '',
+    });
+    setWorkoutModalOpen(true);
+  };
+
+  const handleOpenEditWorkout = (workout: WeeklyAthleteWorkout) => {
+    setEditingWorkout(workout);
+    setWorkoutForm({
+      dia_semana: workout.dia_semana,
+      titulo: workout.titulo,
+      conteudo: workout.conteudo,
+    });
+    setWorkoutModalOpen(true);
+  };
+
+  const handleSaveWorkout = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!athlete) return;
+    if (!workoutForm.titulo.trim()) {
+      alert('Por favor, informe o título do treino.');
+      return;
+    }
+    setSavingWorkout(true);
+
+    try {
+      if (editingWorkout) {
+        const { data, error } = await supabase
+          .from('treinos_semana_atleta')
+          .update({
+            dia_semana: workoutForm.dia_semana,
+            titulo: workoutForm.titulo.trim(),
+            conteudo: workoutForm.conteudo.trim(),
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', editingWorkout.id)
+          .select()
+          .single();
+
+        if (error) throw error;
+        setWeeklyWorkouts(prev => prev.map(w => w.id === editingWorkout.id ? data : w));
+      } else {
+        const { data, error } = await supabase
+          .from('treinos_semana_atleta')
+          .insert({
+            atleta_id: athlete.id,
+            dia_semana: workoutForm.dia_semana,
+            titulo: workoutForm.titulo.trim(),
+            conteudo: workoutForm.conteudo.trim(),
+          })
+          .select()
+          .single();
+
+        if (error) throw error;
+        setWeeklyWorkouts(prev => [...prev, data]);
+      }
+      setWorkoutModalOpen(false);
+      setEditingWorkout(null);
+      setWorkoutForm({ dia_semana: 'segunda', titulo: '', conteudo: '' });
+    } catch (err: any) {
+      console.error('Erro ao salvar treino da semana:', err);
+      alert('Erro ao salvar treino. ' + (err?.message || ''));
+    } finally {
+      setSavingWorkout(false);
+    }
+  };
+
+  const handleDeleteWorkout = async (workoutId: string) => {
+    if (!confirm('Deseja realmente remover este treino da semana?')) return;
+    try {
+      const { error } = await supabase
+        .from('treinos_semana_atleta')
+        .delete()
+        .eq('id', workoutId);
+      if (error) throw error;
+      setWeeklyWorkouts(prev => prev.filter(w => w.id !== workoutId));
+    } catch (err: any) {
+      console.error('Erro ao excluir treino:', err);
+      alert('Erro ao excluir treino.');
+    }
+  };
+
+  const handleToggleWorkoutCheck = async (workoutId: string, currentStatus: boolean) => {
+    try {
+      const nextStatus = !currentStatus;
+      const { error } = await supabase
+        .from('treinos_semana_atleta')
+        .update({
+          concluido: nextStatus,
+          concluido_em: nextStatus ? new Date().toISOString() : null,
+        })
+        .eq('id', workoutId);
+
+      if (error) throw error;
+      setWeeklyWorkouts(prev => prev.map(w => w.id === workoutId ? {
+        ...w,
+        concluido: nextStatus,
+        concluido_em: nextStatus ? new Date().toISOString() : null
+      } : w));
+    } catch (err: any) {
+      console.error('Erro ao atualizar status do treino:', err);
+      alert('Erro ao atualizar status do treino.');
+    }
+  };
 
   // --- Evaluation Modal States ---
   const [isEvaluating, setIsEvaluating] = useState(false);
@@ -864,6 +1035,17 @@ export default function AthleteDetailPage() {
           setPlanDays([]);
           setExecutions([]);
         }
+
+        // Fetch flexible weekly workouts
+        const { data: weekWorkoutsData, error: weekWorkoutsErr } = await supabase
+          .from('treinos_semana_atleta')
+          .select('*')
+          .eq('atleta_id', id)
+          .order('created_at', { ascending: true });
+
+        if (!cancelled && !weekWorkoutsErr && weekWorkoutsData) {
+          setWeeklyWorkouts(weekWorkoutsData);
+        }
       } catch (err) {
         if (cancelled) return;
         console.warn('Erro ao buscar detalhes do atleta:', err);
@@ -980,11 +1162,61 @@ export default function AthleteDetailPage() {
 
       {/* Main Profile Info */}
       <div className="glass-card p-6 flex flex-col md:flex-row items-center md:items-start gap-6">
-        <div className="relative h-36 w-36 rounded-full overflow-hidden border-2 border-accent bg-neutral-dark flex-shrink-0">
-          {athlete.foto_url ? (
-            <img src={athlete.foto_url} alt={athlete.nome} className="h-full w-full object-cover" />
-          ) : (
-            <div className="h-full w-full flex items-center justify-center text-gray-500">Sem Foto</div>
+        <div className="flex flex-col items-center gap-2 flex-shrink-0">
+          <div className="relative group h-36 w-36 rounded-full overflow-hidden border-2 border-accent bg-neutral-dark flex-shrink-0 shadow-lg">
+            {athlete.foto_url ? (
+              <img src={athlete.foto_url} alt={athlete.nome} className="h-full w-full object-cover" />
+            ) : (
+              <div className="h-full w-full flex items-center justify-center text-gray-500 text-xs">Sem Foto</div>
+            )}
+
+            {(isAdmin || (user && athlete.usuario_id === user.id)) && (
+              <label 
+                htmlFor="athlete-avatar-file-input"
+                className="absolute inset-0 bg-black/65 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center cursor-pointer text-white text-center p-2"
+                title="Escolher foto do próprio computador"
+              >
+                {uploadingPhoto ? (
+                  <Loader2 className="h-6 w-6 text-accent animate-spin" />
+                ) : (
+                  <>
+                    <Camera className="h-6 w-6 text-accent mb-1" />
+                    <span className="text-[10px] font-bold leading-tight">Alterar Foto</span>
+                  </>
+                )}
+              </label>
+            )}
+          </div>
+
+          <input
+            id="athlete-avatar-file-input"
+            ref={photoInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={handlePhotoFileChange}
+            disabled={uploadingPhoto}
+          />
+
+          {(isAdmin || (user && athlete.usuario_id === user.id)) && (
+            <button
+              type="button"
+              onClick={() => photoInputRef.current?.click()}
+              disabled={uploadingPhoto}
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-accent hover:text-accent/80 transition-colors bg-accent/10 px-3 py-1.5 rounded-xl border border-accent/20 hover:bg-accent/20"
+            >
+              {uploadingPhoto ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Carregando...
+                </>
+              ) : (
+                <>
+                  <Upload className="h-3.5 w-3.5" />
+                  Escolher Foto
+                </>
+              )}
+            </button>
           )}
         </div>
 
@@ -1202,14 +1434,61 @@ export default function AthleteDetailPage() {
                   onChange={(e) => setEditAthlete({ ...editAthlete, endereco: e.target.value })}
                 />
               </div>
-              <div className="sm:col-span-2">
-                <label className="block text-xs font-semibold text-gray-400 mb-1">URL da Foto de Perfil</label>
-                <input
-                  type="text"
-                  className="w-full glass-input"
-                  value={editAthlete.foto_url}
-                  onChange={(e) => setEditAthlete({ ...editAthlete, foto_url: e.target.value })}
-                />
+              <div className="sm:col-span-2 space-y-2">
+                <label className="block text-xs font-semibold text-gray-400">Foto de Perfil</label>
+                <div className="flex items-center gap-3">
+                  {editAthlete.foto_url ? (
+                    <img src={editAthlete.foto_url} alt="Preview" className="h-12 w-12 rounded-full object-cover border border-accent/40 flex-shrink-0" />
+                  ) : (
+                    <div className="h-12 w-12 rounded-full bg-neutral-dark border border-white/10 flex items-center justify-center text-[10px] text-gray-400 flex-shrink-0">
+                      Sem foto
+                    </div>
+                  )}
+                  <div className="flex-1 space-y-1.5">
+                    <div className="flex items-center gap-2">
+                      <label
+                        htmlFor="edit-modal-photo-file"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent/10 border border-accent/30 text-accent text-xs font-bold hover:bg-accent/20 cursor-pointer transition-colors"
+                      >
+                        <Upload className="h-3.5 w-3.5" />
+                        Escolher do Computador
+                      </label>
+                      <input
+                        id="edit-modal-photo-file"
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={async (e) => {
+                          const f = e.target.files?.[0];
+                          if (f) {
+                            try {
+                              const b64 = await fileToOptimizedDataUrl(f, 600, 600, 0.85);
+                              setEditAthlete(prev => ({ ...prev, foto_url: b64 }));
+                            } catch (err: any) {
+                              alert('Erro ao carregar imagem: ' + (err?.message || ''));
+                            }
+                          }
+                        }}
+                      />
+                      {editAthlete.foto_url && (
+                        <button
+                          type="button"
+                          onClick={() => setEditAthlete(prev => ({ ...prev, foto_url: '' }))}
+                          className="text-[11px] text-red-400 hover:text-red-300 font-semibold"
+                        >
+                          Remover foto
+                        </button>
+                      )}
+                    </div>
+                    <input
+                      type="text"
+                      placeholder="Ou cole a URL da imagem aqui"
+                      className="w-full glass-input text-xs"
+                      value={editAthlete.foto_url}
+                      onChange={(e) => setEditAthlete({ ...editAthlete, foto_url: e.target.value })}
+                    />
+                  </div>
+                </div>
               </div>
               <div className="sm:col-span-2">
                 <label className="block text-xs font-semibold text-gray-400 mb-1">Histórico Médico</label>
@@ -1282,346 +1561,275 @@ export default function AthleteDetailPage() {
         </div>
       )}
 
-      {/* Plano de Treino Semanal Card */}
+      {/* Treinos da Semana Card (Flexível / Dia a Dia) */}
       <div className="glass-card p-6 space-y-6">
-        <div className="flex items-center justify-between border-b border-white/5 pb-3">
-          <h3 className="text-base font-bold text-white flex items-center">
-            <Dumbbell className="h-5 w-5 text-accent mr-2" />
-            Plano de Treino Semanal Personalizado
-          </h3>
-          {isAdmin && !weeklyPlan && !isCreatingPlan && (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/5 pb-4">
+          <div>
+            <h3 className="text-base font-bold text-white flex items-center gap-2">
+              <Dumbbell className="h-5 w-5 text-accent" />
+              Treinos da Semana
+            </h3>
+            <p className="text-xs text-gray-400 mt-0.5">
+              Planejamento livre para o professor cadastrar treinos dia a dia (Segunda a Domingo)
+            </p>
+          </div>
+          {isAdmin && (
             <button
-              onClick={() => {
-                setPlanForm({
-                  titulo: 'Plano de Treino Semanal',
-                  data_inicio: todayLocalISODate(),
-                  data_fim: addDaysLocalISODate(28),
-                  segunda: '',
-                  terca: '',
-                  quarta: '',
-                  quinta: '',
-                  sexta: '',
-                });
-                setIsCreatingPlan(true);
-              }}
-              className="inline-flex items-center justify-center rounded-lg bg-accent px-4 py-2 text-xs font-bold text-neutral-dark hover:bg-accent/90 transition-colors shadow-md"
+              type="button"
+              onClick={() => handleOpenAddWorkout()}
+              className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-accent px-4 py-2 text-xs font-bold text-neutral-dark hover:bg-accent/90 transition-colors shadow-md self-start sm:self-auto"
             >
-              Criar Plano de Treino
+              <PlusCircle className="h-4 w-4" />
+              Adicionar Treino do Dia
             </button>
-          )}
-          {isAdmin && weeklyPlan && (
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => {
-                  setEditPeriodForm({
-                    data_inicio: weeklyPlan.data_inicio,
-                    data_fim: weeklyPlan.data_fim,
-                  });
-                  setIsEditingPlanPeriod(true);
-                }}
-                className="inline-flex items-center justify-center rounded-lg bg-primary border border-primary-light px-3 py-1.5 text-xs font-bold text-white hover:bg-primary/80 transition-colors"
-              >
-                Editar Período
-              </button>
-              <button
-                onClick={handleEndWeeklyPlan}
-                className="inline-flex items-center justify-center rounded-lg bg-red-500/10 border border-red-500/20 px-3 py-1.5 text-xs font-bold text-red-400 hover:bg-red-500/20 transition-colors"
-              >
-                Encerrar Plano
-              </button>
-            </div>
           )}
         </div>
 
-        {/* --- Form to Create Plan --- */}
-        {isCreatingPlan && (
-          <form onSubmit={handleCreateWeeklyPlan} className="space-y-4 bg-black/10 p-4 rounded-xl border border-white/5">
-            <h4 className="text-sm font-bold text-white">Criar Novo Plano</h4>
-            <div className="grid sm:grid-cols-3 gap-4">
-              <div className="sm:col-span-1">
-                <label className="block text-xs font-semibold text-gray-400 mb-1">Título do Plano</label>
-                <input
-                  type="text"
-                  required
-                  className="w-full glass-input text-xs"
-                  value={planForm.titulo}
-                  onChange={(e) => setPlanForm({ ...planForm, titulo: e.target.value })}
-                />
+        {/* Modal de Adicionar/Editar Treino */}
+        {workoutModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+            <div className="bg-neutral-dark border border-white/10 rounded-2xl p-6 max-w-lg w-full shadow-2xl space-y-4">
+              <div className="flex items-center justify-between border-b border-white/5 pb-3">
+                <h4 className="text-base font-bold text-white flex items-center gap-2">
+                  <Dumbbell className="h-4 w-4 text-accent" />
+                  {editingWorkout ? 'Editar Treino da Semana' : 'Novo Treino da Semana'}
+                </h4>
+                <button
+                  type="button"
+                  onClick={() => setWorkoutModalOpen(false)}
+                  className="text-gray-400 hover:text-white transition-colors"
+                >
+                  <X className="h-5 w-5" />
+                </button>
               </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-400 mb-1">Data Início</label>
-                <input
-                  type="date"
-                  required
-                  className="w-full glass-input text-xs"
-                  value={planForm.data_inicio}
-                  onChange={(e) => setPlanForm({ ...planForm, data_inicio: e.target.value })}
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-400 mb-1">Data Fim</label>
-                <input
-                  type="date"
-                  required
-                  className="w-full glass-input text-xs"
-                  value={planForm.data_fim}
-                  onChange={(e) => setPlanForm({ ...planForm, data_fim: e.target.value })}
-                />
-              </div>
-            </div>
 
-            <div className="space-y-3 pt-2">
-              <h5 className="text-xs font-bold text-accent">Exercícios Diários (Segunda a Sexta) - Texto Livre</h5>
+              <form onSubmit={handleSaveWorkout} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-300 mb-1">
+                    Dia da Semana <span className="text-red-400">*</span>
+                  </label>
+                  <select
+                    value={workoutForm.dia_semana}
+                    onChange={(e) => setWorkoutForm({ ...workoutForm, dia_semana: e.target.value as any })}
+                    className="w-full glass-input text-xs"
+                    required
+                  >
+                    <option value="segunda">Segunda-feira</option>
+                    <option value="terca">Terça-feira</option>
+                    <option value="quarta">Quarta-feira</option>
+                    <option value="quinta">Quinta-feira</option>
+                    <option value="sexta">Sexta-feira</option>
+                    <option value="sabado">Sábado</option>
+                    <option value="domingo">Domingo</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-gray-300 mb-1">
+                    Título do Treino <span className="text-red-400">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Ex: Treino de Força e Pliometria / Finalização e Chute"
+                    value={workoutForm.titulo}
+                    onChange={(e) => setWorkoutForm({ ...workoutForm, titulo: e.target.value })}
+                    className="w-full glass-input text-xs"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-gray-300 mb-1">
+                    Exercícios e Orientações (Texto Livre) <span className="text-red-400">*</span>
+                  </label>
+                  <textarea
+                    rows={6}
+                    required
+                    placeholder="Descreva livremente o treino do atleta: aquecimento, exercícios, repetições, carga, intensidade, descansos e observações..."
+                    value={workoutForm.conteudo}
+                    onChange={(e) => setWorkoutForm({ ...workoutForm, conteudo: e.target.value })}
+                    className="w-full glass-input text-xs leading-relaxed"
+                  />
+                </div>
+
+                <div className="flex justify-end gap-2 pt-3 border-t border-white/5">
+                  <button
+                    type="button"
+                    onClick={() => setWorkoutModalOpen(false)}
+                    disabled={savingWorkout}
+                    className="px-4 py-2 text-xs font-bold text-gray-400 hover:text-white transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={savingWorkout}
+                    className="inline-flex items-center gap-1.5 px-5 py-2 text-xs font-bold bg-accent text-neutral-dark rounded-xl hover:bg-accent/90 transition-colors shadow-md disabled:opacity-50"
+                  >
+                    {savingWorkout ? (
+                      <>
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        Salvando...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="h-3.5 w-3.5" />
+                        Salvar Treino
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Workouts Grid / Day-by-day View */}
+        {weeklyWorkouts.length === 0 ? (
+          <div className="py-10 text-center bg-neutral-dark/20 rounded-2xl border border-dashed border-white/10 space-y-3">
+            <Dumbbell className="h-8 w-8 text-accent/50 mx-auto" />
+            <p className="text-sm font-bold text-white">Nenhum treino adicionado para este aluno ainda.</p>
+            <p className="text-xs text-gray-400 max-w-md mx-auto">
+              O professor pode cadastrar livremente os treinos para cada dia da semana (ex: Segunda-feira, Terça-feira...), adicionando título e orientações livres.
+            </p>
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() => handleOpenAddWorkout()}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-accent text-neutral-dark text-xs font-bold hover:bg-accent/90 transition-colors shadow-md"
+              >
+                <PlusCircle className="h-4 w-4" />
+                Cadastrar Primeiro Treino
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {/* Weekdays ordered list */}
+            <div className="grid gap-3">
               {[
                 { key: 'segunda', label: 'Segunda-feira' },
                 { key: 'terca', label: 'Terça-feira' },
                 { key: 'quarta', label: 'Quarta-feira' },
                 { key: 'quinta', label: 'Quinta-feira' },
                 { key: 'sexta', label: 'Sexta-feira' },
-              ].map((day) => (
-                <div key={day.key} className="space-y-1">
-                  <label className="block text-xs font-bold text-gray-300">{day.label}</label>
-                  <textarea
-                    rows={3}
-                    required
-                    placeholder={`Ex: 4 séries de 12 agachamentos. Corrida contínua 20 min. Observações...`}
-                    className="w-full glass-input text-xs"
-                    value={(planForm as any)[day.key]}
-                    onChange={(e) => setPlanForm({ ...planForm, [day.key]: e.target.value })}
-                  />
-                </div>
-              ))}
-            </div>
-
-            <div className="flex justify-end space-x-2 pt-3 border-t border-white/5">
-              <button
-                type="button"
-                onClick={() => setIsCreatingPlan(false)}
-                className="px-4 py-2 text-xs font-bold text-gray-300 hover:text-white"
-              >
-                Cancelar
-              </button>
-              <button
-                type="submit"
-                className="px-5 py-2 text-xs font-bold bg-accent text-neutral-dark rounded-lg hover:bg-accent/90 transition-colors"
-              >
-                Criar Plano
-              </button>
-            </div>
-          </form>
-        )}
-
-        {/* --- Form to Edit Period --- */}
-        {isEditingPlanPeriod && (
-          <form onSubmit={handleUpdatePeriod} className="space-y-4 bg-black/10 p-4 rounded-xl border border-white/5">
-            <h4 className="text-sm font-bold text-white">Editar Período do Plano</h4>
-            <div className="grid sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-semibold text-gray-400 mb-1">Data Início</label>
-                <input
-                  type="date"
-                  required
-                  className="w-full glass-input text-xs"
-                  value={editPeriodForm.data_inicio}
-                  onChange={(e) => setEditPeriodForm({ ...editPeriodForm, data_inicio: e.target.value })}
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-400 mb-1">Data Fim</label>
-                <input
-                  type="date"
-                  required
-                  className="w-full glass-input text-xs"
-                  value={editPeriodForm.data_fim}
-                  onChange={(e) => setEditPeriodForm({ ...editPeriodForm, data_fim: e.target.value })}
-                />
-              </div>
-            </div>
-            <div className="flex justify-end space-x-2 pt-3 border-t border-white/5">
-              <button
-                type="button"
-                onClick={() => setIsEditingPlanPeriod(false)}
-                className="px-4 py-2 text-xs font-bold text-gray-300 hover:text-white"
-              >
-                Cancelar
-              </button>
-              <button
-                type="submit"
-                className="px-5 py-2 text-xs font-bold bg-accent text-neutral-dark rounded-lg hover:bg-accent/90 transition-colors"
-              >
-                Atualizar Período
-              </button>
-            </div>
-          </form>
-        )}
-
-        {/* --- View Active Plan --- */}
-        {weeklyPlan ? (
-          <div className="space-y-6">
-            <div className="flex flex-wrap items-center justify-between gap-4 bg-primary/10 p-4 rounded-xl border border-white/5">
-              <div className="space-y-1">
-                <span className="text-[10px] text-gray-400 block font-semibold uppercase tracking-wider">Título do Plano</span>
-                <span className="text-sm font-bold text-white">{weeklyPlan.titulo}</span>
-              </div>
-              <div className="space-y-1">
-                <span className="text-[10px] text-gray-400 block font-semibold uppercase tracking-wider">Período</span>
-                <span className="text-xs text-gray-200 font-mono">
-                  {new Date(weeklyPlan.data_inicio + 'T00:00').toLocaleDateString('pt-BR')} até {new Date(weeklyPlan.data_fim + 'T00:00').toLocaleDateString('pt-BR')}
-                </span>
-              </div>
-              <div className="space-y-1">
-                <span className="text-[10px] text-gray-400 block font-semibold uppercase tracking-wider">Progresso do Elenco</span>
-                <span className="text-xs text-accent font-bold">
-                  {executions.filter(e => e.concluido).length} / {executions.length} treinos concluídos ({executions.length > 0 ? Math.round((executions.filter(e => e.concluido).length / executions.length) * 100) : 0}%)
-                </span>
-              </div>
-            </div>
-
-            {/* Progress Bar */}
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-gray-400">Progresso Geral</span>
-                <span className="font-bold text-white">
-                  {executions.length > 0 ? Math.round((executions.filter(e => e.concluido).length / executions.length) * 100) : 0}%
-                </span>
-              </div>
-              <div className="w-full h-2 bg-neutral-dark/65 rounded-full overflow-hidden border border-white/5">
-                <div 
-                  className="h-full bg-accent transition-all duration-500 rounded-full" 
-                  style={{ width: `${executions.length > 0 ? Math.round((executions.filter(e => e.concluido).length / executions.length) * 100) : 0}%` }}
-                />
-              </div>
-            </div>
-
-            {/* Template Week Exercises */}
-            <div className="space-y-3">
-              <h4 className="text-xs font-bold text-gray-300 uppercase tracking-wider">Exercícios Planejados (Semana Padrão)</h4>
-              <div className="grid gap-3">
-                {[
-                  { key: 'segunda', label: 'Segunda-feira' },
-                  { key: 'terca', label: 'Terça-feira' },
-                  { key: 'quarta', label: 'Quarta-feira' },
-                  { key: 'quinta', label: 'Quinta-feira' },
-                  { key: 'sexta', label: 'Sexta-feira' },
-                ].map((day) => {
-                  const dayRecord = planDays.find(d => d.dia_semana === day.key);
-                  const isEditingThis = isEditingDayExercises === day.key;
-                  return (
-                    <div key={day.key} className="p-4 bg-neutral-dark/45 rounded-xl border border-white/5 space-y-2">
-                      <div className="flex items-center justify-between border-b border-white/5 pb-1">
-                        <span className="text-xs font-bold text-accent">{day.label}</span>
-                        {isAdmin && !isEditingThis && (
-                          <button
-                            onClick={() => {
-                              setEditExercisesText(dayRecord?.exercicios || '');
-                              setIsEditingDayExercises(day.key);
-                            }}
-                            className="text-[10px] text-gray-400 hover:text-accent font-bold flex items-center gap-1"
-                          >
-                            <Edit2 className="h-3 w-3" /> Editar
-                          </button>
+                { key: 'sabado', label: 'Sábado' },
+                { key: 'domingo', label: 'Domingo' },
+              ].map((day) => {
+                const dayWorkouts = weeklyWorkouts.filter(w => w.dia_semana === day.key);
+                return (
+                  <div key={day.key} className="p-4 bg-neutral-dark/40 rounded-xl border border-white/5 space-y-3">
+                    <div className="flex items-center justify-between border-b border-white/5 pb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-accent uppercase tracking-wider">
+                          {day.label}
+                        </span>
+                        {dayWorkouts.length > 0 && (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/5 text-gray-300 font-mono">
+                            {dayWorkouts.length} {dayWorkouts.length === 1 ? 'treino' : 'treinos'}
+                          </span>
                         )}
                       </div>
-                      {isEditingThis ? (
-                        <div className="space-y-2 pt-1">
-                          <textarea
-                            rows={3}
-                            className="w-full glass-input text-xs"
-                            value={editExercisesText}
-                            onChange={(e) => setEditExercisesText(e.target.value)}
-                          />
-                          <div className="flex justify-end space-x-2">
-                            <button
-                              onClick={() => setIsEditingDayExercises(null)}
-                              className="px-3 py-1 text-[10px] font-bold text-gray-300 hover:text-white"
-                            >
-                              Cancelar
-                            </button>
-                            <button
-                              onClick={() => handleEditDayExercises(day.key as any)}
-                              className="px-3 py-1 text-[10px] font-bold bg-accent text-neutral-dark rounded hover:bg-accent/90"
-                            >
-                              Salvar
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <p className="text-xs text-gray-300 leading-relaxed whitespace-pre-wrap">
-                          {dayRecord?.exercicios || 'Nenhum exercício cadastrado para este dia.'}
-                        </p>
+                      {isAdmin && (
+                        <button
+                          type="button"
+                          onClick={() => handleOpenAddWorkout(day.key as any)}
+                          className="text-[11px] text-accent/80 hover:text-accent font-bold flex items-center gap-1 transition-colors"
+                        >
+                          <PlusCircle className="h-3 w-3" /> + Adicionar neste dia
+                        </button>
                       )}
                     </div>
-                  );
-                })}
-              </div>
-            </div>
 
-            {/* Executions Grid */}
-            <div className="space-y-3">
-              <h4 className="text-xs font-bold text-gray-300 uppercase tracking-wider">Histórico de Conclusão / Calendário</h4>
-              {executions.length === 0 ? (
-                <p className="text-xs text-gray-500">Nenhum dia gerado no período.</p>
-              ) : (
-                <div className="space-y-4">
-                  {/* Group into rows of 5 weekdays */}
-                  {Array.from({ length: Math.ceil(executions.length / 5) }).map((_, weekIndex) => {
-                    const weekExecs = executions.slice(weekIndex * 5, (weekIndex * 5) + 5);
-                    return (
-                      <div key={weekIndex} className="p-3 bg-neutral-dark/30 rounded-xl border border-white/5 space-y-2">
-                        <span className="text-[10px] text-gray-400 font-bold font-mono">Semana {weekIndex + 1}</span>
-                        <div className="grid grid-cols-5 gap-2">
-                          {weekExecs.map((exec) => {
-                            const dateObj = new Date(exec.data + 'T00:00:00');
-                            const dayInitials = getWeekdayName(exec.data).substring(0, 3).toUpperCase();
-                            const formattedDate = dateObj.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
-                            const isToday = exec.data === new Date().getFullYear() + '-' + String(new Date().getMonth() + 1).padStart(2, '0') + '-' + String(new Date().getDate()).padStart(2, '0');
-                            const isFuture = exec.data > new Date().getFullYear() + '-' + String(new Date().getMonth() + 1).padStart(2, '0') + '-' + String(new Date().getDate()).padStart(2, '0');
-                            return (
-                              <div 
-                                key={exec.id} 
-                                className={`flex flex-col items-center p-2 rounded-lg border text-center transition-all ${
-                                  exec.concluido 
-                                    ? 'bg-accent/15 border-accent/35 text-accent' 
-                                    : isToday
-                                      ? 'bg-primary/25 border-primary-light text-white ring-1 ring-accent'
-                                      : isFuture
-                                        ? 'bg-neutral-dark/20 border-white/5 opacity-50 text-gray-600'
-                                        : 'bg-neutral-dark/40 border-white/10 text-gray-400'
-                                }`}
-                              >
-                                <span className="text-[9px] font-black">{dayInitials}</span>
-                                <span className="text-[10px] font-mono mt-0.5">{formattedDate}</span>
-                                <div className="mt-2">
-                                  {exec.concluido ? (
-                                    <Check className="h-3.5 w-3.5 mx-auto text-accent" />
-                                  ) : isFuture ? (
-                                    <Lock className="h-3 w-3 mx-auto text-gray-500" />
-                                  ) : (
-                                    <span className="block h-2 w-2 rounded-full bg-gray-500 mx-auto" />
+                    {dayWorkouts.length === 0 ? (
+                      <p className="text-xs text-gray-500 italic py-1">Nenhum treino programado para este dia.</p>
+                    ) : (
+                      <div className="space-y-3">
+                        {dayWorkouts.map((workout) => (
+                          <div 
+                            key={workout.id} 
+                            className={`p-3.5 rounded-xl border transition-all ${
+                              workout.concluido 
+                                ? 'bg-accent/5 border-accent/25' 
+                                : 'bg-black/20 border-white/5'
+                            }`}
+                          >
+                            <div className="flex items-start justify-between gap-3 mb-2">
+                              <div className="space-y-1">
+                                <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                                  {workout.titulo}
+                                </h4>
+                                <div className="flex items-center gap-2">
+                                  <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                    workout.concluido 
+                                      ? 'bg-accent/20 text-accent border border-accent/30' 
+                                      : 'bg-white/5 text-gray-400 border border-white/5'
+                                  }`}>
+                                    {workout.concluido ? (
+                                      <>
+                                        <Check className="h-3 w-3 stroke-[3px]" />
+                                        Concluído pelo atleta
+                                      </>
+                                    ) : (
+                                      <>Pendente</>
+                                    )}
+                                  </span>
+                                  {workout.concluido && workout.concluido_em && (
+                                    <span className="text-[10px] text-gray-400 font-mono">
+                                      em {new Date(workout.concluido_em).toLocaleDateString('pt-BR')} às {new Date(workout.concluido_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                                    </span>
                                   )}
                                 </div>
-                                {exec.concluido && exec.concluido_em && (
-                                  <span className="text-[8px] text-accent/70 mt-1 block font-mono">
-                                    {new Date(exec.concluido_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                                  </span>
+                              </div>
+
+                              <div className="flex items-center gap-1.5 flex-shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleWorkoutCheck(workout.id, workout.concluido)}
+                                  title={workout.concluido ? 'Marcar como pendente' : 'Marcar como concluído'}
+                                  className={`p-1.5 rounded-lg border text-xs font-bold transition-colors ${
+                                    workout.concluido
+                                      ? 'bg-accent text-neutral-dark border-accent hover:bg-accent/80'
+                                      : 'bg-neutral-dark/60 text-gray-400 border-white/10 hover:text-white hover:border-white/20'
+                                  }`}
+                                >
+                                  <Check className="h-3.5 w-3.5" />
+                                </button>
+                                {isAdmin && (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenEditWorkout(workout)}
+                                      title="Editar treino"
+                                      className="p-1.5 rounded-lg bg-neutral-dark/60 border border-white/10 text-gray-400 hover:text-accent hover:border-accent/40 transition-colors"
+                                    >
+                                      <Edit2 className="h-3.5 w-3.5" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteWorkout(workout.id)}
+                                      title="Excluir treino"
+                                      className="p-1.5 rounded-lg bg-neutral-dark/60 border border-white/10 text-red-400 hover:bg-red-500/10 hover:border-red-500/30 transition-colors"
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </button>
+                                  </>
                                 )}
                               </div>
-                            );
-                          })}
-                        </div>
+                            </div>
+
+                            <div className="p-3 bg-black/20 rounded-lg border border-white/5 text-xs text-gray-200 whitespace-pre-wrap leading-relaxed">
+                              {workout.conteudo}
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                    );
-                  })}
-                </div>
-              )}
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
-        ) : (
-          !isCreatingPlan && (
-            <div className="py-8 text-center text-xs text-gray-500 bg-neutral-dark/20 rounded-xl border border-dashed border-white/10">
-              Nenhum plano de treino semanal ativo no momento para este atleta.
-            </div>
-          )
         )}
       </div>
 
