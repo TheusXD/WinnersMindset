@@ -166,6 +166,8 @@ interface TrainingExecution {
   created_at: string;
 }
 
+type WorkoutFeedback = 'executado' | 'dificuldade' | 'nao_executado';
+
 interface WeeklyAthleteWorkout {
   id: string;
   atleta_id: string;
@@ -174,6 +176,7 @@ interface WeeklyAthleteWorkout {
   conteudo: string;
   concluido: boolean;
   concluido_em: string | null;
+  feedback?: WorkoutFeedback | null;
   created_at?: string;
   updated_at?: string;
 }
@@ -460,15 +463,16 @@ interface WeeklyAthleteWorkout {
     }
   };
 
-  const handleToggleWeeklyWorkout = async (workoutId: string, currentStatus: boolean) => {
+  const handleSetWorkoutFeedback = async (workoutId: string, feedback: WorkoutFeedback | null) => {
     try {
       setUpdatingWorkoutId(workoutId);
-      const nextStatus = !currentStatus;
+      const isCompleted = feedback === 'executado' || feedback === 'dificuldade';
       const { error } = await supabase
         .from('treinos_semana_atleta')
         .update({
-          concluido: nextStatus,
-          concluido_em: nextStatus ? new Date().toISOString() : null,
+          feedback: feedback,
+          concluido: isCompleted,
+          concluido_em: isCompleted ? new Date().toISOString() : null,
         })
         .eq('id', workoutId);
 
@@ -476,15 +480,21 @@ interface WeeklyAthleteWorkout {
 
       setWeeklyWorkouts(prev => prev.map(w => w.id === workoutId ? {
         ...w,
-        concluido: nextStatus,
-        concluido_em: nextStatus ? new Date().toISOString() : null
+        feedback: feedback,
+        concluido: isCompleted,
+        concluido_em: isCompleted ? new Date().toISOString() : null
       } : w));
     } catch (err: any) {
-      console.error('Erro ao marcar treino da semana:', err);
-      alert('Erro ao marcar treino.');
+      console.error('Erro ao atualizar feedback do treino:', err);
+      alert('Erro ao registrar feedback do treino: ' + (err?.message || ''));
     } finally {
       setUpdatingWorkoutId(null);
     }
+  };
+
+  const handleToggleWeeklyWorkout = async (workoutId: string, currentStatus: boolean) => {
+    const nextFeedback: WorkoutFeedback | null = currentStatus ? null : 'executado';
+    await handleSetWorkoutFeedback(workoutId, nextFeedback);
   };
 
   const handleToggleExecution = async (execId: string, currentStatus: boolean) => {
@@ -610,7 +620,11 @@ interface WeeklyAthleteWorkout {
     const todayFlexibleWeekdayKey = currentDayKeyMap[currentDayNum];
     const todayFlexibleWorkout = weeklyWorkouts.find(w => w.dia_semana === todayFlexibleWeekdayKey);
     const totalWeeklyWorkouts = weeklyWorkouts.length;
-    const completedWeeklyWorkouts = weeklyWorkouts.filter(w => w.concluido).length;
+    const executedCount = weeklyWorkouts.filter(w => w.feedback === 'executado').length;
+    const difficultyCount = weeklyWorkouts.filter(w => w.feedback === 'dificuldade').length;
+    const notExecutedCount = weeklyWorkouts.filter(w => w.feedback === 'nao_executado').length;
+    const pendingCount = weeklyWorkouts.filter(w => !w.feedback && !w.concluido).length;
+    const completedWeeklyWorkouts = executedCount + difficultyCount;
     const weeklyWorkoutsProgress = totalWeeklyWorkouts > 0 ? Math.round((completedWeeklyWorkouts / totalWeeklyWorkouts) * 100) : 0;
 
     const nextPayment = studentPayments[0] || {
@@ -774,37 +788,146 @@ interface WeeklyAthleteWorkout {
               {todayFlexibleWorkout ? (
                 <div className="space-y-4">
                   <div className="p-4 bg-neutral-dark/50 rounded-xl border border-white/5 space-y-2.5">
-                    <h4 className="text-sm font-bold text-white flex items-center gap-2">
-                      {todayFlexibleWorkout.titulo}
-                    </h4>
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                        {todayFlexibleWorkout.titulo}
+                      </h4>
+                      {todayFlexibleWorkout.feedback === 'executado' && (
+                        <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                          💚 Executado
+                        </span>
+                      )}
+                      {todayFlexibleWorkout.feedback === 'dificuldade' && (
+                        <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                          💛 Com dificuldade
+                        </span>
+                      )}
+                      {todayFlexibleWorkout.feedback === 'nao_executado' && (
+                        <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-400 border border-rose-500/30">
+                          ❤️ Não executado
+                        </span>
+                      )}
+                      {!todayFlexibleWorkout.feedback && (
+                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-white/5 text-gray-400 border border-white/10">
+                          ⚪ Pendente
+                        </span>
+                      )}
+                    </div>
                     <p className="text-xs text-gray-200 leading-relaxed whitespace-pre-wrap">
                       {todayFlexibleWorkout.conteudo}
                     </p>
                   </div>
 
-                  <button
-                    onClick={() => handleToggleWeeklyWorkout(todayFlexibleWorkout.id, todayFlexibleWorkout.concluido)}
-                    disabled={updatingWorkoutId === todayFlexibleWorkout.id}
-                    className={`w-full py-3.5 px-4 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 shadow-md ${
-                      todayFlexibleWorkout.concluido
-                        ? 'bg-accent text-neutral-dark hover:bg-accent/90'
-                        : 'bg-neutral-dark border border-accent/30 text-accent hover:bg-accent/10'
-                    }`}
-                  >
-                    {updatingWorkoutId === todayFlexibleWorkout.id ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : todayFlexibleWorkout.concluido ? (
-                      <>
-                        <Check className="h-4 w-4 stroke-[3px]" />
-                        TREINO CONCLUÍDO! (Clique para desmarcar)
-                      </>
-                    ) : (
-                      <>
-                        <span className="block h-2 w-2 rounded-full bg-accent animate-ping" />
-                        MARQUEI QUE TREINEI HOJE!
-                      </>
+                  {/* Feedback de Rendimento com Corações */}
+                  <div className="p-4 bg-neutral-dark/35 rounded-xl border border-white/5 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="text-xs font-bold text-white block">
+                          Como foi o seu rendimento hoje?
+                        </span>
+                        <span className="text-[10px] text-gray-400">
+                          Selecione o coração que melhor representa o seu treino:
+                        </span>
+                      </div>
+                      {todayFlexibleWorkout.feedback && (
+                        <button
+                          type="button"
+                          onClick={() => handleSetWorkoutFeedback(todayFlexibleWorkout.id, null)}
+                          disabled={updatingWorkoutId === todayFlexibleWorkout.id}
+                          className="text-[10px] text-gray-400 hover:text-white underline transition-colors"
+                        >
+                          Limpar
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                      {/* Executado */}
+                      <button
+                        type="button"
+                        onClick={() => handleSetWorkoutFeedback(
+                          todayFlexibleWorkout.id, 
+                          todayFlexibleWorkout.feedback === 'executado' ? null : 'executado'
+                        )}
+                        disabled={updatingWorkoutId === todayFlexibleWorkout.id}
+                        className={`p-3 rounded-xl border text-left transition-all flex flex-col justify-between gap-1.5 ${
+                          todayFlexibleWorkout.feedback === 'executado'
+                            ? 'bg-emerald-500/20 border-emerald-500 shadow-lg shadow-emerald-500/15 ring-1 ring-emerald-500/50'
+                            : 'bg-neutral-dark/60 border-white/10 hover:border-emerald-500/40 hover:bg-emerald-500/5'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between w-full">
+                          <span className="text-xl">💚</span>
+                          {todayFlexibleWorkout.feedback === 'executado' && (
+                            <span className="text-[9px] bg-emerald-500 text-neutral-dark font-black px-1.5 py-0.5 rounded">Ativo</span>
+                          )}
+                        </div>
+                        <div>
+                          <span className="block text-xs font-bold text-white">Executado</span>
+                          <span className="block text-[10px] text-gray-400">Treino cumprido</span>
+                        </div>
+                      </button>
+
+                      {/* Com dificuldade */}
+                      <button
+                        type="button"
+                        onClick={() => handleSetWorkoutFeedback(
+                          todayFlexibleWorkout.id, 
+                          todayFlexibleWorkout.feedback === 'dificuldade' ? null : 'dificuldade'
+                        )}
+                        disabled={updatingWorkoutId === todayFlexibleWorkout.id}
+                        className={`p-3 rounded-xl border text-left transition-all flex flex-col justify-between gap-1.5 ${
+                          todayFlexibleWorkout.feedback === 'dificuldade'
+                            ? 'bg-amber-500/20 border-amber-500 shadow-lg shadow-amber-500/15 ring-1 ring-amber-500/50'
+                            : 'bg-neutral-dark/60 border-white/10 hover:border-amber-500/40 hover:bg-amber-500/5'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between w-full">
+                          <span className="text-xl">💛</span>
+                          {todayFlexibleWorkout.feedback === 'dificuldade' && (
+                            <span className="text-[9px] bg-amber-500 text-neutral-dark font-black px-1.5 py-0.5 rounded">Ativo</span>
+                          )}
+                        </div>
+                        <div>
+                          <span className="block text-xs font-bold text-white">Com dificuldade</span>
+                          <span className="block text-[10px] text-gray-400">Cansaço / esforço</span>
+                        </div>
+                      </button>
+
+                      {/* Não executado */}
+                      <button
+                        type="button"
+                        onClick={() => handleSetWorkoutFeedback(
+                          todayFlexibleWorkout.id, 
+                          todayFlexibleWorkout.feedback === 'nao_executado' ? null : 'nao_executado'
+                        )}
+                        disabled={updatingWorkoutId === todayFlexibleWorkout.id}
+                        className={`p-3 rounded-xl border text-left transition-all flex flex-col justify-between gap-1.5 ${
+                          todayFlexibleWorkout.feedback === 'nao_executado'
+                            ? 'bg-rose-500/20 border-rose-500 shadow-lg shadow-rose-500/15 ring-1 ring-rose-500/50'
+                            : 'bg-neutral-dark/60 border-white/10 hover:border-rose-500/40 hover:bg-rose-500/5'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between w-full">
+                          <span className="text-xl">❤️</span>
+                          {todayFlexibleWorkout.feedback === 'nao_executado' && (
+                            <span className="text-[9px] bg-rose-500 text-white font-black px-1.5 py-0.5 rounded">Ativo</span>
+                          )}
+                        </div>
+                        <div>
+                          <span className="block text-xs font-bold text-white">Não executado</span>
+                          <span className="block text-[10px] text-gray-400">Não treinei hoje</span>
+                        </div>
+                      </button>
+                    </div>
+
+                    {updatingWorkoutId === todayFlexibleWorkout.id && (
+                      <div className="flex items-center justify-center gap-2 pt-1 text-xs text-accent">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        <span>Atualizando rendimento...</span>
+                      </div>
                     )}
-                  </button>
+                  </div>
                 </div>
               ) : weeklyWorkouts.length > 0 ? (
                 <div className="py-8 text-center text-xs text-gray-400 bg-neutral-dark/25 rounded-xl border border-white/5 space-y-2">
@@ -837,8 +960,10 @@ interface WeeklyAthleteWorkout {
                         <PieChart>
                           <Pie
                             data={[
-                              { name: 'Concluídos', value: completedWeeklyWorkouts },
-                              { name: 'Pendentes', value: totalWeeklyWorkouts - completedWeeklyWorkouts }
+                              ...(executedCount > 0 ? [{ name: 'Executados', value: executedCount, color: '#10b981' }] : []),
+                              ...(difficultyCount > 0 ? [{ name: 'Com dificuldade', value: difficultyCount, color: '#f59e0b' }] : []),
+                              ...(notExecutedCount > 0 ? [{ name: 'Não executados', value: notExecutedCount, color: '#ef4444' }] : []),
+                              ...(pendingCount > 0 ? [{ name: 'Pendentes', value: pendingCount, color: 'rgba(255, 255, 255, 0.08)' }] : []),
                             ]}
                             cx="50%"
                             cy="50%"
@@ -849,31 +974,45 @@ interface WeeklyAthleteWorkout {
                             paddingAngle={3}
                             dataKey="value"
                           >
-                            <Cell fill="#20c997" />
-                            <Cell fill="rgba(255, 255, 255, 0.08)" />
+                            {[
+                              ...(executedCount > 0 ? [{ color: '#10b981' }] : []),
+                              ...(difficultyCount > 0 ? [{ color: '#f59e0b' }] : []),
+                              ...(notExecutedCount > 0 ? [{ color: '#ef4444' }] : []),
+                              ...(pendingCount > 0 ? [{ color: 'rgba(255, 255, 255, 0.08)' }] : []),
+                            ].map((entry, idx) => (
+                              <Cell key={idx} fill={entry.color} />
+                            ))}
                           </Pie>
                         </PieChart>
                       </ResponsiveContainer>
                       <div className="absolute flex flex-col items-center justify-center text-center">
                         <span className="text-xl font-black text-white leading-none">{weeklyWorkoutsProgress}%</span>
-                        <span className="text-[8px] text-accent font-bold uppercase tracking-wider mt-0.5">Concluído</span>
+                        <span className="text-[8px] text-accent font-bold uppercase tracking-wider mt-0.5">Executado</span>
                       </div>
                     </div>
 
                     <div className="flex-1 w-full space-y-2">
                       <div className="space-y-1">
-                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Resumo Semanal</span>
+                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Rendimento Semanal</span>
                         <div className="flex justify-between items-center text-xs">
-                          <span className="text-gray-400">Total de Treinos:</span>
+                          <span className="text-gray-400">Total na semana:</span>
                           <span className="font-bold text-white">{totalWeeklyWorkouts} {totalWeeklyWorkouts === 1 ? 'dia' : 'dias'}</span>
                         </div>
                         <div className="flex justify-between items-center text-xs">
-                          <span className="text-gray-400">Concluídos:</span>
-                          <span className="font-bold text-accent">{completedWeeklyWorkouts} {completedWeeklyWorkouts === 1 ? 'dia' : 'dias'}</span>
+                          <span className="text-emerald-400 flex items-center gap-1 font-semibold"><span>💚</span> Executados:</span>
+                          <span className="font-bold text-emerald-400">{executedCount}</span>
                         </div>
                         <div className="flex justify-between items-center text-xs">
-                          <span className="text-gray-400">Pendentes:</span>
-                          <span className="font-bold text-gray-400">{totalWeeklyWorkouts - completedWeeklyWorkouts} {totalWeeklyWorkouts - completedWeeklyWorkouts === 1 ? 'dia' : 'dias'}</span>
+                          <span className="text-amber-400 flex items-center gap-1 font-semibold"><span>💛</span> Com dificuldade:</span>
+                          <span className="font-bold text-amber-400">{difficultyCount}</span>
+                        </div>
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="text-rose-400 flex items-center gap-1 font-semibold"><span>❤️</span> Não executados:</span>
+                          <span className="font-bold text-rose-400">{notExecutedCount}</span>
+                        </div>
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="text-gray-400 flex items-center gap-1"><span>⚪</span> Pendentes:</span>
+                          <span className="font-bold text-gray-400">{pendingCount}</span>
                         </div>
                       </div>
 
@@ -903,7 +1042,7 @@ interface WeeklyAthleteWorkout {
                   Programação da Semana
                 </h3>
                 <p className="text-xs text-gray-400 mt-0.5">
-                  Veja todos os treinos que seu professor preparou para cada dia
+                  Veja todos os treinos que seu professor preparou e marque seu feedback diário
                 </p>
               </div>
 
@@ -936,35 +1075,80 @@ interface WeeklyAthleteWorkout {
                       ) : (
                         <div className="space-y-3">
                           {dayWorkouts.map((workout) => (
-                            <div key={workout.id} className="space-y-2 bg-black/20 p-3 rounded-lg border border-white/5">
+                            <div key={workout.id} className="space-y-2.5 bg-black/20 p-3 rounded-lg border border-white/5">
                               <div className="flex items-start justify-between gap-2">
                                 <h5 className="text-xs font-bold text-white">{workout.titulo}</h5>
-                                <button
-                                  type="button"
-                                  onClick={() => handleToggleWeeklyWorkout(workout.id, workout.concluido)}
-                                  disabled={updatingWorkoutId === workout.id}
-                                  title={workout.concluido ? 'Marcar como pendente' : 'Marcar como concluído'}
-                                  className={`p-1 rounded-md border text-[10px] font-bold transition-colors flex-shrink-0 ${
-                                    workout.concluido
-                                      ? 'bg-accent text-neutral-dark border-accent hover:bg-accent/80'
-                                      : 'bg-neutral-dark text-gray-400 border-white/10 hover:text-white'
-                                  }`}
-                                >
-                                  {updatingWorkoutId === workout.id ? (
-                                    <Loader2 className="h-3 w-3 animate-spin" />
-                                  ) : (
-                                    <Check className="h-3 w-3" />
-                                  )}
-                                </button>
+                                <div className="flex items-center gap-1 flex-shrink-0">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSetWorkoutFeedback(
+                                      workout.id, 
+                                      workout.feedback === 'executado' ? null : 'executado'
+                                    )}
+                                    disabled={updatingWorkoutId === workout.id}
+                                    title="💚 Executado"
+                                    className={`p-1 rounded text-xs border transition-all ${
+                                      workout.feedback === 'executado'
+                                        ? 'bg-emerald-500/30 border-emerald-500 scale-110 shadow-sm shadow-emerald-500/20'
+                                        : 'bg-neutral-dark/80 text-gray-400 border-white/10 hover:border-emerald-500/40 hover:text-white'
+                                    }`}
+                                  >
+                                    💚
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSetWorkoutFeedback(
+                                      workout.id, 
+                                      workout.feedback === 'dificuldade' ? null : 'dificuldade'
+                                    )}
+                                    disabled={updatingWorkoutId === workout.id}
+                                    title="💛 Com dificuldade"
+                                    className={`p-1 rounded text-xs border transition-all ${
+                                      workout.feedback === 'dificuldade'
+                                        ? 'bg-amber-500/30 border-amber-500 scale-110 shadow-sm shadow-amber-500/20'
+                                        : 'bg-neutral-dark/80 text-gray-400 border-white/10 hover:border-amber-500/40 hover:text-white'
+                                    }`}
+                                  >
+                                    💛
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSetWorkoutFeedback(
+                                      workout.id, 
+                                      workout.feedback === 'nao_executado' ? null : 'nao_executado'
+                                    )}
+                                    disabled={updatingWorkoutId === workout.id}
+                                    title="❤️ Não executado"
+                                    className={`p-1 rounded text-xs border transition-all ${
+                                      workout.feedback === 'nao_executado'
+                                        ? 'bg-rose-500/30 border-rose-500 scale-110 shadow-sm shadow-rose-500/20'
+                                        : 'bg-neutral-dark/80 text-gray-400 border-white/10 hover:border-rose-500/40 hover:text-white'
+                                    }`}
+                                  >
+                                    ❤️
+                                  </button>
+                                </div>
                               </div>
                               <p className="text-[11px] text-gray-300 whitespace-pre-wrap leading-relaxed">
                                 {workout.conteudo}
                               </p>
-                              <div className="pt-1 text-[9px] text-gray-500 font-mono">
-                                {workout.concluido ? (
-                                  <span className="text-accent font-bold">✓ Concluído</span>
+                              <div className="pt-1.5 text-[10px] flex items-center justify-between border-t border-white/5">
+                                {workout.feedback === 'executado' ? (
+                                  <span className="text-emerald-400 font-bold flex items-center gap-1">
+                                    <span>💚</span> Executado
+                                  </span>
+                                ) : workout.feedback === 'dificuldade' ? (
+                                  <span className="text-amber-400 font-bold flex items-center gap-1">
+                                    <span>💛</span> Com dificuldade
+                                  </span>
+                                ) : workout.feedback === 'nao_executado' ? (
+                                  <span className="text-rose-400 font-bold flex items-center gap-1">
+                                    <span>❤️</span> Não executado
+                                  </span>
                                 ) : (
-                                  <span>Pendente</span>
+                                  <span className="text-gray-500 flex items-center gap-1">
+                                    <span>⚪</span> Pendente
+                                  </span>
                                 )}
                               </div>
                             </div>

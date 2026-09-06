@@ -129,6 +129,8 @@ interface TrainingExecution {
   created_at: string;
 }
 
+export type WorkoutFeedback = 'executado' | 'dificuldade' | 'nao_executado';
+
 export interface WeeklyAthleteWorkout {
   id: string;
   atleta_id: string;
@@ -137,6 +139,7 @@ export interface WeeklyAthleteWorkout {
   conteudo: string;
   concluido: boolean;
   concluido_em: string | null;
+  feedback?: WorkoutFeedback | null;
   created_at?: string;
   updated_at?: string;
 }
@@ -244,12 +247,19 @@ export default function AthleteDetailPage() {
   const [weeklyWorkouts, setWeeklyWorkouts] = useState<WeeklyAthleteWorkout[]>([]);
   const [workoutModalOpen, setWorkoutModalOpen] = useState(false);
   const [editingWorkout, setEditingWorkout] = useState<WeeklyAthleteWorkout | null>(null);
-  const [workoutForm, setWorkoutForm] = useState({
-    dia_semana: 'segunda' as 'segunda' | 'terca' | 'quarta' | 'quinta' | 'sexta' | 'sabado' | 'domingo',
+  const [workoutForm, setWorkoutForm] = useState<{
+    dia_semana: 'segunda' | 'terca' | 'quarta' | 'quinta' | 'sexta' | 'sabado' | 'domingo';
+    titulo: string;
+    conteudo: string;
+    feedback: WorkoutFeedback | '';
+  }>({
+    dia_semana: 'segunda',
     titulo: '',
     conteudo: '',
+    feedback: '',
   });
   const [savingWorkout, setSavingWorkout] = useState(false);
+  const [updatingWorkoutId, setUpdatingWorkoutId] = useState<string | null>(null);
 
   // Photo upload from computer states
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
@@ -294,6 +304,7 @@ export default function AthleteDetailPage() {
       dia_semana: preselectedDay || 'segunda',
       titulo: '',
       conteudo: '',
+      feedback: '',
     });
     setWorkoutModalOpen(true);
   };
@@ -304,6 +315,7 @@ export default function AthleteDetailPage() {
       dia_semana: workout.dia_semana,
       titulo: workout.titulo,
       conteudo: workout.conteudo,
+      feedback: workout.feedback || '',
     });
     setWorkoutModalOpen(true);
   };
@@ -318,6 +330,9 @@ export default function AthleteDetailPage() {
     setSavingWorkout(true);
 
     try {
+      const isCompleted = workoutForm.feedback === 'executado' || workoutForm.feedback === 'dificuldade';
+      const feedbackValue = workoutForm.feedback ? workoutForm.feedback : null;
+
       if (editingWorkout) {
         const { data, error } = await supabase
           .from('treinos_semana_atleta')
@@ -325,6 +340,9 @@ export default function AthleteDetailPage() {
             dia_semana: workoutForm.dia_semana,
             titulo: workoutForm.titulo.trim(),
             conteudo: workoutForm.conteudo.trim(),
+            feedback: feedbackValue,
+            concluido: isCompleted,
+            concluido_em: isCompleted ? (editingWorkout.concluido_em || new Date().toISOString()) : null,
             updated_at: new Date().toISOString(),
           })
           .eq('id', editingWorkout.id)
@@ -341,6 +359,9 @@ export default function AthleteDetailPage() {
             dia_semana: workoutForm.dia_semana,
             titulo: workoutForm.titulo.trim(),
             conteudo: workoutForm.conteudo.trim(),
+            feedback: feedbackValue,
+            concluido: isCompleted,
+            concluido_em: isCompleted ? new Date().toISOString() : null,
           })
           .select()
           .single();
@@ -350,7 +371,7 @@ export default function AthleteDetailPage() {
       }
       setWorkoutModalOpen(false);
       setEditingWorkout(null);
-      setWorkoutForm({ dia_semana: 'segunda', titulo: '', conteudo: '' });
+      setWorkoutForm({ dia_semana: 'segunda', titulo: '', conteudo: '', feedback: '' });
     } catch (err: any) {
       console.error('Erro ao salvar treino da semana:', err);
       alert('Erro ao salvar treino. ' + (err?.message || ''));
@@ -374,27 +395,38 @@ export default function AthleteDetailPage() {
     }
   };
 
-  const handleToggleWorkoutCheck = async (workoutId: string, currentStatus: boolean) => {
+  const handleSetWorkoutFeedback = async (workoutId: string, feedback: WorkoutFeedback | null) => {
     try {
-      const nextStatus = !currentStatus;
+      setUpdatingWorkoutId(workoutId);
+      const isCompleted = feedback === 'executado' || feedback === 'dificuldade';
       const { error } = await supabase
         .from('treinos_semana_atleta')
         .update({
-          concluido: nextStatus,
-          concluido_em: nextStatus ? new Date().toISOString() : null,
+          feedback: feedback,
+          concluido: isCompleted,
+          concluido_em: isCompleted ? new Date().toISOString() : null,
         })
         .eq('id', workoutId);
 
       if (error) throw error;
+
       setWeeklyWorkouts(prev => prev.map(w => w.id === workoutId ? {
         ...w,
-        concluido: nextStatus,
-        concluido_em: nextStatus ? new Date().toISOString() : null
+        feedback: feedback,
+        concluido: isCompleted,
+        concluido_em: isCompleted ? new Date().toISOString() : null
       } : w));
     } catch (err: any) {
-      console.error('Erro ao atualizar status do treino:', err);
-      alert('Erro ao atualizar status do treino.');
+      console.error('Erro ao atualizar feedback do treino:', err);
+      alert('Erro ao registrar feedback do treino: ' + (err?.message || ''));
+    } finally {
+      setUpdatingWorkoutId(null);
     }
+  };
+
+  const handleToggleWorkoutCheck = async (workoutId: string, currentStatus: boolean) => {
+    const nextFeedback: WorkoutFeedback | null = currentStatus ? null : 'executado';
+    await handleSetWorkoutFeedback(workoutId, nextFeedback);
   };
 
   // --- Evaluation Modal States ---
@@ -1652,6 +1684,22 @@ export default function AthleteDetailPage() {
                   />
                 </div>
 
+                <div>
+                  <label className="block text-xs font-semibold text-gray-300 mb-1">
+                    Status de Execução / Feedback
+                  </label>
+                  <select
+                    value={workoutForm.feedback}
+                    onChange={(e) => setWorkoutForm({ ...workoutForm, feedback: e.target.value as any })}
+                    className="w-full glass-input text-xs"
+                  >
+                    <option value="">⚪ Pendente (Não avaliado)</option>
+                    <option value="executado">💚 Executado</option>
+                    <option value="dificuldade">💛 Com dificuldade</option>
+                    <option value="nao_executado">❤️ Não executado</option>
+                  </select>
+                </div>
+
                 <div className="flex justify-end gap-2 pt-3 border-t border-white/5">
                   <button
                     type="button"
@@ -1680,6 +1728,48 @@ export default function AthleteDetailPage() {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        )}
+
+        {/* Feedback Performance Counter Banner */}
+        {weeklyWorkouts.length > 0 && (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 p-3 rounded-2xl bg-neutral-dark/40 border border-white/5">
+            <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/25 flex items-center gap-2.5">
+              <span className="text-xl">💚</span>
+              <div>
+                <p className="text-[10px] uppercase font-bold text-emerald-400">Executado</p>
+                <p className="text-lg font-black text-white leading-none mt-0.5">
+                  {weeklyWorkouts.filter(w => w.feedback === 'executado').length}
+                </p>
+              </div>
+            </div>
+            <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/25 flex items-center gap-2.5">
+              <span className="text-xl">💛</span>
+              <div>
+                <p className="text-[10px] uppercase font-bold text-amber-400">Com dificuldade</p>
+                <p className="text-lg font-black text-white leading-none mt-0.5">
+                  {weeklyWorkouts.filter(w => w.feedback === 'dificuldade').length}
+                </p>
+              </div>
+            </div>
+            <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/25 flex items-center gap-2.5">
+              <span className="text-xl">❤️</span>
+              <div>
+                <p className="text-[10px] uppercase font-bold text-rose-400">Não executado</p>
+                <p className="text-lg font-black text-white leading-none mt-0.5">
+                  {weeklyWorkouts.filter(w => w.feedback === 'nao_executado').length}
+                </p>
+              </div>
+            </div>
+            <div className="p-2.5 rounded-xl bg-white/5 border border-white/10 flex items-center gap-2.5">
+              <span className="text-xl">⚪</span>
+              <div>
+                <p className="text-[10px] uppercase font-bold text-gray-400">Pendente</p>
+                <p className="text-lg font-black text-white leading-none mt-0.5">
+                  {weeklyWorkouts.filter(w => !w.feedback).length}
+                </p>
+              </div>
             </div>
           </div>
         )}
@@ -1749,8 +1839,12 @@ export default function AthleteDetailPage() {
                           <div 
                             key={workout.id} 
                             className={`p-3.5 rounded-xl border transition-all ${
-                              workout.concluido 
-                                ? 'bg-accent/5 border-accent/25' 
+                              workout.feedback === 'executado'
+                                ? 'bg-emerald-500/5 border-emerald-500/30'
+                                : workout.feedback === 'dificuldade'
+                                ? 'bg-amber-500/5 border-amber-500/30'
+                                : workout.feedback === 'nao_executado'
+                                ? 'bg-rose-500/5 border-rose-500/30'
                                 : 'bg-black/20 border-white/5'
                             }`}
                           >
@@ -1759,21 +1853,24 @@ export default function AthleteDetailPage() {
                                 <h4 className="text-sm font-bold text-white flex items-center gap-2">
                                   {workout.titulo}
                                 </h4>
-                                <div className="flex items-center gap-2">
-                                  <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                                    workout.concluido 
-                                      ? 'bg-accent/20 text-accent border border-accent/30' 
-                                      : 'bg-white/5 text-gray-400 border border-white/5'
-                                  }`}>
-                                    {workout.concluido ? (
-                                      <>
-                                        <Check className="h-3 w-3 stroke-[3px]" />
-                                        Concluído pelo atleta
-                                      </>
-                                    ) : (
-                                      <>Pendente</>
-                                    )}
-                                  </span>
+                                <div className="flex flex-wrap items-center gap-2">
+                                  {workout.feedback === 'executado' ? (
+                                    <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                                      <span>💚</span> Executado
+                                    </span>
+                                  ) : workout.feedback === 'dificuldade' ? (
+                                    <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                                      <span>💛</span> Com dificuldade
+                                    </span>
+                                  ) : workout.feedback === 'nao_executado' ? (
+                                    <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-400 border border-rose-500/30">
+                                      <span>❤️</span> Não executado
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-white/5 text-gray-400 border border-white/10">
+                                      <span>⚪</span> Pendente
+                                    </span>
+                                  )}
                                   {workout.concluido && workout.concluido_em && (
                                     <span className="text-[10px] text-gray-400 font-mono">
                                       em {new Date(workout.concluido_em).toLocaleDateString('pt-BR')} às {new Date(workout.concluido_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
@@ -1783,18 +1880,58 @@ export default function AthleteDetailPage() {
                               </div>
 
                               <div className="flex items-center gap-1.5 flex-shrink-0">
-                                <button
-                                  type="button"
-                                  onClick={() => handleToggleWorkoutCheck(workout.id, workout.concluido)}
-                                  title={workout.concluido ? 'Marcar como pendente' : 'Marcar como concluído'}
-                                  className={`p-1.5 rounded-lg border text-xs font-bold transition-colors ${
-                                    workout.concluido
-                                      ? 'bg-accent text-neutral-dark border-accent hover:bg-accent/80'
-                                      : 'bg-neutral-dark/60 text-gray-400 border-white/10 hover:text-white hover:border-white/20'
-                                  }`}
-                                >
-                                  <Check className="h-3.5 w-3.5" />
-                                </button>
+                                {/* 💚 💛 ❤️ Quick Feedback Buttons */}
+                                <div className="flex items-center gap-1 bg-black/40 p-1 rounded-lg border border-white/10">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSetWorkoutFeedback(
+                                      workout.id, 
+                                      workout.feedback === 'executado' ? null : 'executado'
+                                    )}
+                                    disabled={updatingWorkoutId === workout.id}
+                                    title="💚 Executado"
+                                    className={`p-1 rounded text-xs border transition-all ${
+                                      workout.feedback === 'executado'
+                                        ? 'bg-emerald-500/30 border-emerald-500 scale-110 shadow-sm shadow-emerald-500/20'
+                                        : 'bg-neutral-dark/80 text-gray-400 border-transparent hover:border-emerald-500/40 hover:text-white'
+                                    }`}
+                                  >
+                                    💚
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSetWorkoutFeedback(
+                                      workout.id, 
+                                      workout.feedback === 'dificuldade' ? null : 'dificuldade'
+                                    )}
+                                    disabled={updatingWorkoutId === workout.id}
+                                    title="💛 Com dificuldade"
+                                    className={`p-1 rounded text-xs border transition-all ${
+                                      workout.feedback === 'dificuldade'
+                                        ? 'bg-amber-500/30 border-amber-500 scale-110 shadow-sm shadow-amber-500/20'
+                                        : 'bg-neutral-dark/80 text-gray-400 border-transparent hover:border-amber-500/40 hover:text-white'
+                                    }`}
+                                  >
+                                    💛
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSetWorkoutFeedback(
+                                      workout.id, 
+                                      workout.feedback === 'nao_executado' ? null : 'nao_executado'
+                                    )}
+                                    disabled={updatingWorkoutId === workout.id}
+                                    title="❤️ Não executado"
+                                    className={`p-1 rounded text-xs border transition-all ${
+                                      workout.feedback === 'nao_executado'
+                                        ? 'bg-rose-500/30 border-rose-500 scale-110 shadow-sm shadow-rose-500/20'
+                                        : 'bg-neutral-dark/80 text-gray-400 border-transparent hover:border-rose-500/40 hover:text-white'
+                                    }`}
+                                  >
+                                    ❤️
+                                  </button>
+                                </div>
+
                                 {isAdmin && (
                                   <>
                                     <button
