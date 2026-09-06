@@ -461,15 +461,22 @@ export default function PaymentsPage() {
               <div>
                 <label className="block text-xs font-semibold text-gray-400 mb-1">Selecione o Atleta</label>
                 <select
-                  disabled={!!editingPayment}
+                  disabled={!!editingPayment || athletes.length === 0}
                   className="w-full glass-input bg-neutral-dark/95 text-sm disabled:opacity-75"
                   value={formData.atleta_id}
                   onChange={(e) => setFormData({ ...formData, atleta_id: e.target.value })}
                 >
-                  {athletes.map((a) => (
-                    <option key={a.id} value={a.id}>{a.nome} ({a.categoria})</option>
-                  ))}
+                  {athletes.length === 0 ? (
+                    <option value="">Nenhum atleta cadastrado</option>
+                  ) : (
+                    athletes.map((a) => (
+                      <option key={a.id} value={a.id}>{a.nome} ({a.categoria})</option>
+                    ))
+                  )}
                 </select>
+                {athletes.length === 0 && (
+                  <p className="text-[10px] text-amber-400 mt-1">Cadastre atletas no elenco primeiro para registrar pagamentos.</p>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -544,8 +551,8 @@ export default function PaymentsPage() {
                 </button>
                 <button
                   type="submit"
-                  disabled={submitting}
-                  className="px-5 py-2 text-xs font-bold bg-accent text-neutral-dark rounded-lg hover:bg-accent/90 transition-colors flex items-center justify-center"
+                  disabled={submitting || (!editingPayment && athletes.length === 0)}
+                  className="px-5 py-2 text-xs font-bold bg-accent text-neutral-dark rounded-lg hover:bg-accent/90 transition-colors flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {submitting && <Loader2 className="h-3 w-3 animate-spin mr-2" />}
                   <Save className="h-3.5 w-3.5 mr-1.5" />

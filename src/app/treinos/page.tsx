@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Calendar, Plus, MapPin, Users, CheckCircle, XCircle, AlertCircle, Save, TrendingUp, Video, Edit } from 'lucide-react';
+import { Calendar, Plus, MapPin, Users, CheckCircle, XCircle, AlertCircle, Save, TrendingUp, Video, Edit, Trash2, Loader2 } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { todayLocalISODate } from '@/lib/date';
 import { getSafeYoutubeEmbedUrl } from '@/lib/youtube';
@@ -336,6 +336,18 @@ export default function TrainingsPage() {
     }
   };
 
+  const handleDeleteTraining = async (trainingId: string) => {
+    if (!confirm('Deseja realmente excluir este treino? Esta ação é irreversível.')) return;
+    try {
+      const { error } = await supabase.from('treinos').delete().eq('id', trainingId);
+      if (error) throw error;
+      setTrainings(prev => prev.filter(t => t.id !== trainingId));
+    } catch (err) {
+      console.error('Erro ao excluir treino:', err);
+      alert('Não foi possível excluir este treino. Verifique sua conexão e tente novamente.');
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header section */}
@@ -559,7 +571,14 @@ export default function TrainingsPage() {
 
       {/* Trainings List */}
       {loading ? (
-        <div className="text-center py-12 text-gray-400">Carregando cronograma...</div>
+        <div className="text-center py-12 text-gray-400 flex flex-col items-center justify-center space-y-2">
+          <Loader2 className="h-6 w-6 animate-spin text-accent" />
+          <span>Carregando cronograma...</span>
+        </div>
+      ) : trainings.length === 0 ? (
+        <div className="glass-card p-12 text-center text-gray-400">
+          Nenhum treino agendado no momento.
+        </div>
       ) : (
         <div className="space-y-4">
           {trainings.map((training) => {
@@ -645,6 +664,16 @@ export default function TrainingsPage() {
                     >
                       <CheckCircle className="h-3.5 w-3.5 mr-1.5" />
                       Chamada Realizada
+                    </button>
+                  )}
+
+                  {isAdmin && (
+                    <button
+                      onClick={() => handleDeleteTraining(training.id)}
+                      title="Excluir treino"
+                      className="p-1.5 rounded-lg border border-white/10 text-gray-400 hover:text-red-400 hover:border-red-500/30 transition-colors"
+                    >
+                      <Trash2 className="h-4 w-4" />
                     </button>
                   )}
                 </div>

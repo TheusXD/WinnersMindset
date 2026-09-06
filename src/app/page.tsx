@@ -833,7 +833,7 @@ interface WeeklyAthleteWorkout {
                   <div className="flex flex-col sm:flex-row items-center justify-center gap-6 bg-neutral-dark/20 p-4 rounded-xl border border-white/5">
                     {/* Doughnut */}
                     <div className="relative w-32 h-32 flex-shrink-0 flex items-center justify-center">
-                      <ResponsiveContainer width="100%" height="100%">
+                      <ResponsiveContainer width="100%" height="100%" minWidth={100} minHeight={100}>
                         <PieChart>
                           <Pie
                             data={[
@@ -1170,6 +1170,13 @@ interface WeeklyAthleteWorkout {
       color: 'text-accent border-accent/20 bg-accent/5',
     }] : []),
     {
+      title: 'Cronograma de Treinos',
+      desc: isAdmin ? 'Gerencie sessões coletivas, lista de presenças e evolução.' : 'Consulte a programação de treinos e listas de presença.',
+      icon: Calendar,
+      href: '/treinos',
+      color: 'text-emerald-400 border-emerald-400/20 bg-emerald-400/5',
+    },
+    {
       title: 'Elenco de Atletas',
       desc: isAdmin ? 'Gerencie fichas físicas, posições e evolução técnica do grupo.' : 'Consulte posições, dados físicos e evolução do grupo.',
       icon: Users,
@@ -1183,6 +1190,13 @@ interface WeeklyAthleteWorkout {
       href: '/jogos',
       color: 'text-amber-400 border-amber-400/20 bg-amber-400/5',
     },
+    ...(isAdmin ? [{
+      title: 'Gerenciamento Financeiro',
+      desc: 'Monitore planos mensais/anuais, vencimentos e histórico de pagamentos.',
+      icon: CreditCard,
+      href: '/pagamentos',
+      color: 'text-purple-400 border-purple-400/20 bg-purple-400/5',
+    }] : []),
   ];
 
   return (
@@ -1285,7 +1299,7 @@ interface WeeklyAthleteWorkout {
               Foco: {upcoming.focusOrTactics}
             </span>
             <Link 
-              href={upcoming.type === 'training' ? '/atletas' : '/jogos'}
+              href={upcoming.type === 'training' ? '/treinos' : '/jogos'}
               className="inline-flex items-center justify-center rounded-lg bg-accent px-4 py-2 text-xs font-bold text-neutral-dark hover:bg-accent/90 transition-colors shadow-md"
             >
               {isAdmin ? 'Gerenciar' : 'Visualizar'}

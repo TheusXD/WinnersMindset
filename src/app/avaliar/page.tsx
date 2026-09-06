@@ -218,6 +218,12 @@ ${data.observacoes || 'Nenhuma observação inserida.'}
 
       {loading ? (
         <div className="text-center py-12 text-gray-400">Carregando elenco de atletas...</div>
+      ) : athletes.length === 0 ? (
+        <div className="glass-card p-12 text-center text-gray-400 space-y-3">
+          <Users className="h-10 w-10 text-white/20 mx-auto" />
+          <p className="font-semibold text-white">Nenhum atleta cadastrado no momento</p>
+          <p className="text-xs text-gray-400">Cadastre atletas no menu &quot;Atletas&quot; para poder lançar avaliações de desempenho.</p>
+        </div>
       ) : report ? (
         /* Formatted Report View */
         <div className="glass-card p-6 border-l-4 border-l-accent space-y-6">

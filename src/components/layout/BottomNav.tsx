@@ -3,7 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, Users, Target, ClipboardList, CreditCard } from 'lucide-react';
+import { Home, Users, Target, Calendar, CreditCard } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 
 export default function BottomNav() {
@@ -12,10 +12,10 @@ export default function BottomNav() {
 
   const navItems = [
     { label: 'Início', href: '/', icon: Home },
-    { label: 'Atletas', href: '/atletas', icon: Users },
+    { label: 'Treinos', href: '/treinos', icon: Calendar },
     { label: 'Jogos', href: '/jogos', icon: Target },
+    { label: 'Atletas', href: '/atletas', icon: Users },
     ...(isAdmin ? [
-      { label: 'Avaliar', href: '/avaliar', icon: ClipboardList },
       { label: 'Pagamentos', href: '/pagamentos', icon: CreditCard }
     ] : []),
   ];

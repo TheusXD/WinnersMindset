@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Target, Trophy, Calendar, MapPin, Plus, Shield, Check, Save } from 'lucide-react';
+import { Target, Trophy, Calendar, MapPin, Plus, Shield, Check, Save, Trash2, Loader2 } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 
 interface Game {
@@ -286,6 +286,18 @@ export default function GamesPage() {
       setActiveResultGame(null);
     } finally {
       setSavingResult(false);
+    }
+  };
+
+  const handleDeleteGame = async (gameId: string) => {
+    if (!confirm('Deseja realmente excluir este jogo? Esta ação é irreversível.')) return;
+    try {
+      const { error } = await supabase.from('jogos').delete().eq('id', gameId);
+      if (error) throw error;
+      setGames(prev => prev.filter(g => g.id !== gameId));
+    } catch (err) {
+      console.error('Erro ao excluir jogo:', err);
+      alert('Não foi possível excluir este jogo. Verifique sua conexão e tente novamente.');
     }
   };
 
@@ -631,83 +643,106 @@ export default function GamesPage() {
 
       {/* Matches List */}
       {!activeBoardGame && (
-        <div className="space-y-4">
-          {games.map((game) => {
-            const date = new Date(game.data_hora);
-            const formattedDate = date.toLocaleDateString('pt-BR', {
-              day: '2-digit',
-              month: 'long',
-              hour: '2-digit',
-              minute: '2-digit',
-            });
+        <>
+          {loading ? (
+            <div className="text-center py-12 text-gray-400 flex flex-col items-center justify-center space-y-2">
+              <Loader2 className="h-6 w-6 animate-spin text-accent" />
+              <span>Carregando confrontos...</span>
+            </div>
+          ) : games.length === 0 ? (
+            <div className="glass-card p-12 text-center text-gray-400">
+              Nenhum confronto agendado no momento.
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {games.map((game) => {
+                const date = new Date(game.data_hora);
+                const formattedDate = date.toLocaleDateString('pt-BR', {
+                  day: '2-digit',
+                  month: 'long',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                });
 
-            return (
-              <div key={game.id} className="glass-card p-5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 relative">
-                {/* Visual accent based on status */}
-                <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-primary" />
+                return (
+                  <div key={game.id} className="glass-card p-5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 relative">
+                    {/* Visual accent based on status */}
+                    <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-primary" />
 
-                <div className="pl-2 space-y-1 flex-1">
-                  <div className="flex items-center space-x-2">
-                    <span className="text-[9px] font-bold px-2 py-0.5 bg-primary text-accent rounded-full">
-                      {game.categoria}
-                    </span>
-                    <span className="text-xs text-gray-400 font-semibold">
-                      Tática: {game.esquema_tatico}
-                    </span>
-                  </div>
-                  <h3 className="text-base font-bold text-white mt-1 flex items-center">
-                    {game.adversario}
-                  </h3>
-                  
-                  {game.status === 'concluido' && (
-                    <div className="flex items-center space-x-2 py-1.5">
-                      <span className="text-xs font-bold px-3 py-1 bg-accent/25 text-accent border border-accent/20 rounded-lg">
-                        Placar: {game.gols_pro} x {game.gols_contra}
-                      </span>
+                    <div className="pl-2 space-y-1 flex-1">
+                      <div className="flex items-center space-x-2">
+                        <span className="text-[9px] font-bold px-2 py-0.5 bg-primary text-accent rounded-full">
+                          {game.categoria}
+                        </span>
+                        <span className="text-xs text-gray-400 font-semibold">
+                          Tática: {game.esquema_tatico}
+                        </span>
+                      </div>
+                      <h3 className="text-base font-bold text-white mt-1 flex items-center">
+                        {game.adversario}
+                      </h3>
+                      
+                      {game.status === 'concluido' && (
+                        <div className="flex items-center space-x-2 py-1.5">
+                          <span className="text-xs font-bold px-3 py-1 bg-accent/25 text-accent border border-accent/20 rounded-lg">
+                            Placar: {game.gols_pro} x {game.gols_contra}
+                          </span>
+                        </div>
+                      )}
+
+                      <div className="flex items-center space-x-4 text-[10px] text-gray-400 pt-1">
+                        <span className="flex items-center">
+                          <Calendar className="h-3.5 w-3.5 mr-1 text-accent" />
+                          {formattedDate}
+                        </span>
+                        {game.local && (
+                          <span className="flex items-center">
+                            <MapPin className="h-3.5 w-3.5 mr-1 text-accent" />
+                            {game.local}
+                          </span>
+                        )}
+                      </div>
                     </div>
-                  )}
 
-                  <div className="flex items-center space-x-4 text-[10px] text-gray-400 pt-1">
-                    <span className="flex items-center">
-                      <Calendar className="h-3.5 w-3.5 mr-1 text-accent" />
-                      {formattedDate}
-                    </span>
-                    {game.local && (
-                      <span className="flex items-center">
-                        <MapPin className="h-3.5 w-3.5 mr-1 text-accent" />
-                        {game.local}
-                      </span>
-                    )}
+                    <div className="flex flex-wrap items-center gap-2 pl-2 md:pl-0">
+                      <button
+                        onClick={() => openTacticalBoard(game)}
+                        className="inline-flex items-center justify-center rounded-lg bg-primary/20 border border-primary-light/30 px-3.5 py-1.5 text-xs font-bold text-accent hover:bg-primary/45 transition-colors"
+                      >
+                        <Shield className="h-3.5 w-3.5 mr-1.5" />
+                        Quadro Tático
+                      </button>
+
+                      {game.status === 'agendado' && isAdmin && (
+                        <button
+                          onClick={() => {
+                            setActiveResultGame(game);
+                            setScorePro(0);
+                            setScoreContra(0);
+                          }}
+                          className="inline-flex items-center justify-center rounded-lg bg-accent px-3.5 py-1.5 text-xs font-bold text-neutral-dark hover:bg-accent/90 transition-colors shadow-md"
+                        >
+                          <Trophy className="h-3.5 w-3.5 mr-1.5" />
+                          Registrar Placar
+                        </button>
+                      )}
+
+                      {isAdmin && (
+                        <button
+                          onClick={() => handleDeleteGame(game.id)}
+                          title="Excluir partida"
+                          className="p-1.5 rounded-lg border border-white/10 text-gray-400 hover:text-red-400 hover:border-red-500/30 transition-colors"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
                   </div>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-2 pl-2 md:pl-0">
-                  <button
-                    onClick={() => openTacticalBoard(game)}
-                    className="inline-flex items-center justify-center rounded-lg bg-primary/20 border border-primary-light/30 px-3.5 py-1.5 text-xs font-bold text-accent hover:bg-primary/45 transition-colors"
-                  >
-                    <Shield className="h-3.5 w-3.5 mr-1.5" />
-                    Quadro Tático
-                  </button>
-
-                  {game.status === 'agendado' && isAdmin && (
-                    <button
-                      onClick={() => {
-                        setActiveResultGame(game);
-                        setScorePro(0);
-                        setScoreContra(0);
-                      }}
-                      className="inline-flex items-center justify-center rounded-lg bg-accent px-3.5 py-1.5 text-xs font-bold text-neutral-dark hover:bg-accent/90 transition-colors shadow-md"
-                    >
-                      <Trophy className="h-3.5 w-3.5 mr-1.5" />
-                      Registrar Placar
-                    </button>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
+                );
+              })}
+            </div>
+          )}
+        </>
       )}
     </div>
   );
