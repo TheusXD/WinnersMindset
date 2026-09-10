@@ -54,10 +54,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // profile (email-prefix name, no photo) over the user's real one.
         console.error('Error fetching profile, will retry later:', error.message);
       } else {
-        // No row found for this user yet. Cargo (admin vs atleta) is
-        // decided server-side by the bootstrap_own_profile RPC — it checks
-        // the verified JWT email against the bootstrap-admin allowlist in
-        // the database, so the client never needs to know that list itself.
+        // Check if there is an athlete record already linked in `atletas`
+        const { data: athleteRecord } = await supabase
+          .from('atletas')
+          .select('nome, telefone, foto_url')
+          .eq('usuario_id', currentUser.id)
+          .maybeSingle();
+
+        if (athleteRecord) {
+          const { data: newProfile } = await supabase
+            .from('perfis_usuarios')
+            .upsert({
+              id: currentUser.id,
+              nome: athleteRecord.nome,
+              cargo: 'atleta',
+              email: currentUser.email,
+              telefone: athleteRecord.telefone,
+              foto_url: athleteRecord.foto_url
+            })
+            .select()
+            .single();
+
+          if (newProfile) {
+            setProfile(newProfile as Profile);
+            return;
+          }
+        }
+
         const email = currentUser.email || '';
         try {
           const { data: bootstrapped, error: bootstrapErr } = await supabase
@@ -104,6 +127,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .maybeSingle();
 
       if (!profError && profile) {
+        return true;
+      }
+
+      // 3. Check if they already have an active athlete record in `atletas`
+      const { data: athlete, error: athleteError } = await supabase
+        .from('atletas')
+        .select('id')
+        .eq('usuario_id', currentUser.id)
+        .maybeSingle();
+
+      if (!athleteError && athlete) {
         return true;
       }
 
