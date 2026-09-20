@@ -6,10 +6,17 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { 
   User, Mail, Lock, Phone, Calendar, Clipboard, 
-  MapPin, Users, ArrowLeft, ArrowRight, Loader2, CheckCircle 
+  MapPin, Users, ArrowLeft, ArrowRight, Loader2, CheckCircle,
+  Activity, Scale, Ruler, Sparkles
 } from 'lucide-react';
+import { 
+  NIVEIS_ATIVIDADE, 
+  calculateIMC, 
+  getIMCCategory, 
+  getNivelAtividadeInfo 
+} from '@/lib/imc';
 
-type Step = 1 | 2 | 3 | 4; // Step 4 is success screen
+type Step = 1 | 2 | 3 | 4 | 5; // Step 5 is success screen
 
 export default function CadastroPage() {
   const router = useRouter();
@@ -31,7 +38,12 @@ export default function CadastroPage() {
   const [rg, setRg] = useState('');
   const [telefone, setTelefone] = useState('');
 
-  // Step 3: Family & Address
+  // Step 3: Physical & Conditioning Profile
+  const [peso, setPeso] = useState('');
+  const [altura, setAltura] = useState('');
+  const [nivelAtividade, setNivelAtividade] = useState<number>(1);
+
+  // Step 4: Family & Address
   const [nomePai, setNomePai] = useState('');
   const [nomeMae, setNomeMae] = useState('');
   const [endereco, setEndereco] = useState('');
@@ -79,15 +91,36 @@ export default function CadastroPage() {
     return true;
   };
 
+  const validateStep3 = () => {
+    if (peso && (isNaN(parseFloat(peso.replace(',', '.'))) || parseFloat(peso.replace(',', '.')) <= 0)) {
+      setError('Por favor, informe um peso válido (ex: 68.5).');
+      return false;
+    }
+    if (altura && (isNaN(parseFloat(altura.replace(',', '.'))) || parseFloat(altura.replace(',', '.')) <= 0)) {
+      setError('Por favor, informe uma altura válida (ex: 1.75).');
+      return false;
+    }
+    setError(null);
+    return true;
+  };
+
   const handleNextStep = () => {
     if (step === 1 && validateStep1()) setStep(2);
     else if (step === 2 && validateStep2()) setStep(3);
+    else if (step === 3 && validateStep3()) setStep(4);
   };
 
   const handlePrevStep = () => {
     setError(null);
     if (step > 1) setStep((step - 1) as Step);
   };
+
+  // IMC Calculation live
+  const parsedPeso = peso ? parseFloat(peso.replace(',', '.')) : null;
+  const parsedAltura = altura ? parseFloat(altura.replace(',', '.')) : null;
+  const imcCalculado = calculateIMC(parsedPeso, parsedAltura);
+  const imcInfo = getIMCCategory(imcCalculado);
+  const nivelInfo = getNivelAtividadeInfo(nivelAtividade);
 
   async function handleRegister(e: React.FormEvent) {
     e.preventDefault();
@@ -104,19 +137,21 @@ export default function CadastroPage() {
     setLoading(true);
 
     try {
-      // 1. Sign up user in Supabase Auth
+      // 1. Sign up user in Auth
       let userId: string;
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
         password,
+        options: {
+          data: {
+            peso: parsedPeso,
+            altura: parsedAltura,
+            nivel_atividade: nivelAtividade,
+          },
+        },
       });
 
       if (authError) {
-        // If this email was already created by a previous attempt where the
-        // signup succeeded but the solicitacao insert below failed, signUp
-        // will report "already registered" and leave the user stuck forever
-        // (never approvable, never able to re-register). Try to recover by
-        // signing into that same account and resuming the request instead.
         const alreadyRegistered = authError.message.toLowerCase().includes('already registered')
           || authError.message.toLowerCase().includes('already exists');
         if (!alreadyRegistered) throw authError;
@@ -132,7 +167,6 @@ export default function CadastroPage() {
       }
 
       // 2. Skip the insert if a request already exists for this account
-      // (recovered from a prior partial failure) — otherwise create it.
       const { data: existingRequest } = await supabase
         .from('solicitacoes_cadastro')
         .select('id')
@@ -153,21 +187,24 @@ export default function CadastroPage() {
             nome_pai: nomePai || null,
             nome_mae: nomeMae || null,
             endereco,
-            status: 'pendente'
+            status: 'pendente',
+            peso: parsedPeso,
+            altura: parsedAltura,
+            nivel_atividade: nivelAtividade,
           });
 
         if (dbError) throw dbError;
       }
 
-      // Show success screen (Step 4)
-      setStep(4);
+      // Show success screen (Step 5)
+      setStep(5);
     } catch (err) {
       console.error('Registration error:', err);
       const msg = (err as Error).message || '';
       if (msg.toLowerCase().includes('already registered') || msg.toLowerCase().includes('already exists')) {
         setError('Este e-mail já está cadastrado no sistema. Tente fazer login ou use outro e-mail.');
       } else if (msg.toLowerCase().includes('failed to fetch') || msg.toLowerCase().includes('network') || msg.toLowerCase().includes('load failed')) {
-        setError('Não foi possível conectar ao servidor (Supabase). Verifique sua conexão ou se o projeto no Supabase está ativo/pausado.');
+        setError('Não foi possível conectar ao servidor. Verifique sua conexão e tente novamente.');
       } else {
         setError(msg || 'Ocorreu um erro ao enviar seu cadastro.');
       }
@@ -178,24 +215,32 @@ export default function CadastroPage() {
 
   return (
     <div className="min-h-[85vh] flex items-center justify-center px-4 py-8">
-      <div className="max-w-md w-full glass-card p-8 border-t-4 border-t-accent shadow-2xl relative overflow-hidden">
+      <div className="max-w-lg w-full glass-card p-8 border-t-4 border-t-accent shadow-2xl relative overflow-hidden">
         <div className="absolute -right-10 -top-10 h-32 w-32 rounded-full bg-accent/10 blur-2xl pointer-events-none" />
         <div className="absolute -left-10 -bottom-10 h-32 w-32 rounded-full bg-blue-500/10 blur-2xl pointer-events-none" />
 
         {/* Form header (only if not success page) */}
-        {step < 4 && (
+        {step < 5 && (
           <div className="text-center mb-8 relative z-10">
             <div className="mx-auto w-16 h-16 flex items-center justify-center mb-4">
               <Image src="/logo.png" alt="Winner's Mindset Logo" width={64} height={64} className="rounded-xl" priority />
             </div>
             <h2 className="text-2xl font-black text-white">Criar Conta de Atleta</h2>
-            <p className="text-xs text-gray-400 mt-1">Preencha seus dados para solicitar acesso.</p>
+            <p className="text-xs text-gray-400 mt-1">Preencha seus dados para solicitar acesso ao time.</p>
             
             {/* Step indicators */}
             <div className="flex items-center justify-center mt-6 gap-2">
               <div className={`h-1.5 rounded-full transition-all duration-300 ${step >= 1 ? 'w-8 bg-accent' : 'w-2 bg-white/10'}`} />
               <div className={`h-1.5 rounded-full transition-all duration-300 ${step >= 2 ? 'w-8 bg-accent' : 'w-2 bg-white/10'}`} />
               <div className={`h-1.5 rounded-full transition-all duration-300 ${step >= 3 ? 'w-8 bg-accent' : 'w-2 bg-white/10'}`} />
+              <div className={`h-1.5 rounded-full transition-all duration-300 ${step >= 4 ? 'w-8 bg-accent' : 'w-2 bg-white/10'}`} />
+            </div>
+            <div className="text-[11px] font-bold text-accent mt-2">
+              Passo {step} de 4: {
+                step === 1 ? 'Dados de Acesso' :
+                step === 2 ? 'Dados Pessoais' :
+                step === 3 ? 'Perfil Físico & IMC' : 'Endereço e Responsáveis'
+              }
             </div>
           </div>
         )}
@@ -292,8 +337,123 @@ export default function CadastroPage() {
           </div>
         )}
 
-        {/* STEP 3: FAMILY & ADDRESS */}
+        {/* STEP 3: PHYSICAL & CONDITIONING PROFILE */}
         {step === 3 && (
+          <div className="space-y-5 relative z-10">
+            <p className="text-xs text-gray-400">
+              Essas informações ajudam o professor a calcular seu IMC e prescrever a carga ideal de treino.
+            </p>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-gray-400 mb-1">Peso (kg)</label>
+                <div className="relative">
+                  <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-400"><Scale className="h-4 w-4" /></span>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={peso}
+                    onChange={(e) => setPeso(e.target.value)}
+                    className="w-full pl-9 glass-input text-sm"
+                    placeholder="Ex: 68.5"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-400 mb-1">Altura (m)</label>
+                <div className="relative">
+                  <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-400"><Ruler className="h-4 w-4" /></span>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={altura}
+                    onChange={(e) => setAltura(e.target.value)}
+                    className="w-full pl-9 glass-input text-sm"
+                    placeholder="Ex: 1.75"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Live IMC Preview Badge */}
+            {imcCalculado !== null && (
+              <div className={`p-4 rounded-xl border ${imcInfo.borderColor} ${imcInfo.bgColor} flex items-center justify-between transition-all duration-300 animate-fadeIn`}>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="h-4 w-4 text-accent" />
+                    <span className="text-xs font-bold text-gray-300">IMC Calculado:</span>
+                    <span className="text-sm font-black text-white">{imcCalculado}</span>
+                  </div>
+                  <p className="text-[11px] text-gray-300 mt-0.5">
+                    Classificação:{' '}
+                    <strong className={imcInfo.color}>{imcInfo.label}</strong>
+                  </p>
+                </div>
+                <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full border ${imcInfo.borderColor} ${imcInfo.color} bg-black/30`}>
+                  {imcInfo.label}
+                </span>
+              </div>
+            )}
+
+            {/* Conditioning Level Selector (1 to 5) */}
+            <div>
+              <label className="block text-xs font-semibold text-gray-400 mb-2 flex items-center gap-1.5">
+                <Activity className="h-4 w-4 text-accent" />
+                Como você classifica seu nível de atividade física atual?
+              </label>
+              <div className="space-y-2">
+                {NIVEIS_ATIVIDADE.map((item) => {
+                  const isSelected = nivelAtividade === item.nivel;
+                  return (
+                    <button
+                      key={item.nivel}
+                      type="button"
+                      onClick={() => setNivelAtividade(item.nivel)}
+                      className={`w-full text-left p-3 rounded-xl border transition-all flex items-center justify-between gap-3 ${
+                        isSelected 
+                          ? 'bg-accent/15 border-accent shadow-lg shadow-accent/5' 
+                          : 'bg-neutral-light/30 border-white/5 hover:bg-neutral-light/60'
+                      }`}
+                    >
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className={`text-xs font-bold px-2 py-0.5 rounded-md ${
+                            isSelected ? 'bg-accent text-neutral-dark' : 'bg-white/10 text-gray-300'
+                          }`}>
+                            {item.sublabel}
+                          </span>
+                          <span className={`text-xs font-bold ${isSelected ? 'text-white' : 'text-gray-300'}`}>
+                            {item.label}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-gray-400 mt-1 line-clamp-1">
+                          {item.descricao}
+                        </p>
+                      </div>
+                      <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
+                        isSelected ? 'border-accent bg-accent' : 'border-white/20'
+                      }`}>
+                        {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-neutral-dark" />}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="pt-4 flex justify-between gap-3">
+              <button type="button" onClick={handlePrevStep} className="flex items-center gap-1 px-4 py-3 text-xs font-bold text-gray-400 hover:text-white transition-colors">
+                Anterior
+              </button>
+              <button type="button" onClick={handleNextStep} className="flex-1 flex justify-center items-center gap-1.5 py-3 px-4 rounded-xl text-sm font-bold text-neutral-dark bg-accent hover:bg-accent/90 transition-colors">
+                Próximo<ArrowRight className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* STEP 4: FAMILY & ADDRESS */}
+        {step === 4 && (
           <form onSubmit={handleRegister} className="space-y-4 relative z-10">
             <div>
               <label className="block text-xs font-semibold text-gray-400 mb-1">Nome do Pai</label>
@@ -316,6 +476,22 @@ export default function CadastroPage() {
                 <input type="text" required value={endereco} onChange={(e) => setEndereco(e.target.value)} className="w-full pl-9 glass-input text-sm" placeholder="Rua, número, bairro, cidade" />
               </div>
             </div>
+
+            {/* Summary badge before submitting */}
+            <div className="p-3 rounded-xl bg-white/5 border border-white/10 text-xs text-gray-300 flex items-center justify-between">
+              <div>
+                <span className="text-gray-400 block text-[10px]">Perfil Físico Cadastrado:</span>
+                <span className="font-bold text-white">
+                  {peso ? `${peso} kg` : '-'} | {altura ? `${altura} m` : '-'} ({nivelInfo.label})
+                </span>
+              </div>
+              {imcCalculado && (
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${imcInfo.bgColor} ${imcInfo.color}`}>
+                  IMC: {imcCalculado} ({imcInfo.label})
+                </span>
+              )}
+            </div>
+
             <div className="pt-4 flex justify-between gap-3">
               <button type="button" onClick={handlePrevStep} className="flex items-center gap-1 px-4 py-3 text-xs font-bold text-gray-400 hover:text-white transition-colors" disabled={loading}>
                 Anterior
@@ -327,8 +503,8 @@ export default function CadastroPage() {
           </form>
         )}
 
-        {/* STEP 4: SUCCESS VIEW */}
-        {step === 4 && (
+        {/* STEP 5: SUCCESS VIEW */}
+        {step === 5 && (
           <div className="relative z-10 text-center space-y-6 py-8">
             <div className="mx-auto w-20 h-20 rounded-full bg-accent/15 border border-accent/30 flex items-center justify-center">
               <CheckCircle className="h-10 w-10 text-accent animate-bounce" />

@@ -1,6 +1,9 @@
 # Guia de Implantação e Deploy - Legionários Football Academy
 
-Este documento explica como configurar o banco de dados de produção no Supabase e implantar o projeto Next.js na Vercel (ou outra plataforma).
+> [!TIP]
+> Para hospedar o sistema **100% na Hostinger** com banco de dados MySQL (sem risco de hibernação ou pausa), siga o guia detalhado em **[HOSTINGER_DEPLOY.md](HOSTINGER_DEPLOY.md)**.
+
+Este documento traz as instruções gerais de implantação do sistema.
 
 ---
 

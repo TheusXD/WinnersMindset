@@ -32,7 +32,12 @@ import {
   Trash2,
   Lock,
   Check,
-  Camera
+  Camera,
+  Scale,
+  Ruler,
+  Sparkles,
+  Clock,
+  History as HistoryIcon
 } from 'lucide-react';
 import { fileToOptimizedDataUrl } from '@/lib/image-upload';
 import {
@@ -49,6 +54,14 @@ import {
   Tooltip,
   Legend
 } from 'recharts';
+import {
+  NIVEIS_ATIVIDADE,
+  calculateIMC,
+  getIMCCategory,
+  getNivelAtividadeInfo,
+  getWorkoutRecommendation,
+  checkQuadrimestralStatus
+} from '@/lib/imc';
 
 interface Athlete {
   id: string;
@@ -65,6 +78,20 @@ interface Athlete {
   telefone_responsavel?: string | null;
   historico_medico?: string | null;
   usuario_id?: string | null;
+  nivel_atividade?: number | null;
+  data_ultima_pesagem?: string | null;
+}
+
+interface HistoricoCorporal {
+  id: string;
+  atleta_id: string;
+  peso: number;
+  altura: number;
+  imc: number;
+  nivel_atividade: number;
+  data_medicao: string;
+  observacoes?: string | null;
+  created_at?: string;
 }
 
 interface Evaluation {
@@ -157,7 +184,9 @@ const DEFAULT_ATHLETE: Athlete = {
   telefone: '(21) 99999-8888',
   endereco: 'Rua das Laranjeiras, 123 - Rio de Janeiro',
   telefone_responsavel: '(21) 98888-7777',
-  historico_medico: 'Sem alergias. Histórico de asma na infância controlada. Cartão de vacina em dia.'
+  historico_medico: 'Sem alergias. Histórico de asma na infância controlada. Cartão de vacina em dia.',
+  nivel_atividade: 4,
+  data_ultima_pesagem: '2026-05-15'
 };
 
 const DEFAULT_EVALUATIONS: Evaluation[] = [
@@ -295,6 +324,95 @@ export default function AthleteDetailPage() {
     } finally {
       setUploadingPhoto(false);
       if (photoInputRef.current) photoInputRef.current.value = '';
+    }
+  };
+
+  // Quadrimestral & Physical Evaluation States
+  const [quadrimestralModalOpen, setQuadrimestralModalOpen] = useState(false);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [historicoMedicoes, setHistoricoMedicoes] = useState<HistoricoCorporal[]>([]);
+  const [savingMedicao, setSavingMedicao] = useState(false);
+  const [medicaoPeso, setMedicaoPeso] = useState('');
+  const [medicaoAltura, setMedicaoAltura] = useState('');
+  const [medicaoNivel, setMedicaoNivel] = useState<number>(3);
+  const [medicaoObs, setMedicaoObs] = useState('');
+
+  const handleOpenMedicaoModal = () => {
+    setMedicaoPeso(athlete?.peso ? String(athlete.peso) : '');
+    setMedicaoAltura(athlete?.altura ? String(athlete.altura) : '');
+    setMedicaoNivel(athlete?.nivel_atividade || 3);
+    setMedicaoObs('');
+    setQuadrimestralModalOpen(true);
+  };
+
+  const handleSaveMedicao = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!athlete) return;
+    const p = parseFloat(medicaoPeso.replace(',', '.'));
+    const a = parseFloat(medicaoAltura.replace(',', '.'));
+
+    if (isNaN(p) || p <= 0 || isNaN(a) || a <= 0) {
+      alert('Por favor, informe peso e altura válidos.');
+      return;
+    }
+
+    setSavingMedicao(true);
+    const imc = calculateIMC(p, a);
+    const today = todayLocalISODate();
+    const normalizedAltura = a > 3 ? a / 100 : a;
+
+    const payload = {
+      atleta_id: athlete.id,
+      peso: p,
+      altura: normalizedAltura,
+      imc: imc || 0,
+      nivel_atividade: medicaoNivel,
+      data_medicao: today,
+      observacoes: medicaoObs.trim() || null,
+    };
+
+    try {
+      const { data: inserted, error: histErr } = await supabase
+        .from('historico_corporal')
+        .insert([payload])
+        .select()
+        .single();
+
+      if (histErr) throw histErr;
+
+      // Update athlete record with latest measurements
+      const { error: athleteErr } = await supabase
+        .from('atletas')
+        .update({
+          peso: payload.peso,
+          altura: payload.altura,
+          nivel_atividade: payload.nivel_atividade,
+          data_ultima_pesagem: today,
+        })
+        .eq('id', athlete.id);
+
+      if (athleteErr) throw athleteErr;
+
+      // Update local state
+      setAthlete(prev => prev ? {
+        ...prev,
+        peso: payload.peso,
+        altura: payload.altura,
+        nivel_atividade: payload.nivel_atividade,
+        data_ultima_pesagem: today,
+      } : null);
+
+      if (inserted) {
+        setHistoricoMedicoes(prev => [inserted, ...prev]);
+      }
+
+      setQuadrimestralModalOpen(false);
+      alert('Nova medição quadrimestral registrada com sucesso!');
+    } catch (err: any) {
+      console.error('Erro ao registrar nova medição:', err);
+      alert('Erro ao salvar avaliação: ' + (err?.message || 'Erro desconhecido'));
+    } finally {
+      setSavingMedicao(false);
     }
   };
 
@@ -700,7 +818,7 @@ export default function AthleteDetailPage() {
       const dates = getWeekdayDates(planForm.data_inicio, planForm.data_fim);
       const execPayload = dates.map(dateStr => {
         const weekday = getWeekdayName(dateStr);
-        const dayRecord = createdDays.find(d => d.dia_semana === weekday);
+        const dayRecord = Array.isArray(createdDays) ? createdDays.find((d: any) => d.dia_semana === weekday) : null;
         return {
           plano_id: newPlan.id,
           plano_dia_id: dayRecord?.id,
@@ -781,11 +899,11 @@ export default function AthleteDetailPage() {
 
       if (fetchError) throw fetchError;
 
-      const existingDatesSet = new Set((existingExecs || []).map(e => e.data));
+      const existingDatesSet = new Set(((existingExecs as any[]) || []).map((e: any) => e.data));
 
       const toInsert = newDates.filter(dateStr => !existingDatesSet.has(dateStr)).map(dateStr => {
         const weekday = getWeekdayName(dateStr);
-        const dayRecord = planDays.find(d => d.dia_semana === weekday);
+        const dayRecord = planDays.find((d: any) => d.dia_semana === weekday);
         return {
           plano_id: weeklyPlan.id,
           plano_dia_id: dayRecord?.id,
@@ -847,6 +965,7 @@ export default function AthleteDetailPage() {
     endereco: '',
     telefone_responsavel: '',
     historico_medico: '',
+    nivel_atividade: '3',
   });
 
   const handleStartEdit = () => {
@@ -864,6 +983,7 @@ export default function AthleteDetailPage() {
       endereco: athlete.endereco || '',
       telefone_responsavel: athlete.telefone_responsavel || '',
       historico_medico: athlete.historico_medico || '',
+      nivel_atividade: athlete.nivel_atividade ? athlete.nivel_atividade.toString() : '3',
     });
     setIsEditing(true);
   };
@@ -888,6 +1008,7 @@ export default function AthleteDetailPage() {
       endereco: editAthlete.endereco || null,
       telefone_responsavel: editAthlete.telefone_responsavel || null,
       historico_medico: editAthlete.historico_medico || null,
+      nivel_atividade: editAthlete.nivel_atividade ? parseInt(editAthlete.nivel_atividade, 10) : 3,
     };
 
     try {
@@ -1078,6 +1199,17 @@ export default function AthleteDetailPage() {
         if (!cancelled && !weekWorkoutsErr && weekWorkoutsData) {
           setWeeklyWorkouts(weekWorkoutsData);
         }
+
+        // Fetch historico corporal
+        const { data: histData } = await supabase
+          .from('historico_corporal')
+          .select('*')
+          .eq('atleta_id', id)
+          .order('data_medicao', { ascending: false });
+
+        if (!cancelled && histData) {
+          setHistoricoMedicoes(histData as HistoricoCorporal[]);
+        }
       } catch (err) {
         if (cancelled) return;
         console.warn('Erro ao buscar detalhes do atleta:', err);
@@ -1091,6 +1223,18 @@ export default function AthleteDetailPage() {
         // misleading, so fall through to "Atleta não encontrado" instead.
         if (id === 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11') {
           setAthlete(DEFAULT_ATHLETE);
+          setHistoricoMedicoes([
+            {
+              id: 'hist-demo-1',
+              atleta_id: id,
+              peso: 62.5,
+              altura: 1.72,
+              imc: 21.1,
+              nivel_atividade: 4,
+              data_medicao: '2026-05-15',
+              observacoes: 'Medição inicial de entrada no elenco.'
+            }
+          ]);
           let finalEvals = [...DEFAULT_EVALUATIONS];
           try {
             const localStr = localStorage.getItem('local_avaliacoes');
@@ -1268,7 +1412,7 @@ export default function AthleteDetailPage() {
             <p className="text-sm text-accent font-semibold mt-1">{athlete.posicao}</p>
           </div>
 
-          <div className="grid grid-cols-3 gap-4 border-t border-b border-white/5 py-4 max-w-lg">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 border-t border-b border-white/5 py-4 max-w-xl">
             <div className="text-center md:text-left">
               <span className="block text-[10px] text-gray-400">Idade</span>
               <span className="text-sm font-bold text-white">{age} anos</span>
@@ -1280,6 +1424,22 @@ export default function AthleteDetailPage() {
             <div className="text-center md:text-left">
               <span className="block text-[10px] text-gray-400">Peso</span>
               <span className="text-sm font-bold text-white">{athlete.peso ? `${athlete.peso.toFixed(1)} kg` : '-'}</span>
+            </div>
+            <div className="text-center md:text-left">
+              <span className="block text-[10px] text-gray-400">IMC</span>
+              {athlete.peso && athlete.altura ? (
+                (() => {
+                  const imc = calculateIMC(athlete.peso, athlete.altura);
+                  const cat = getIMCCategory(imc);
+                  return (
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full inline-block mt-0.5 border ${cat.badge} ${cat.bg} ${cat.border}`}>
+                      {imc?.toFixed(1)} ({cat.label})
+                    </span>
+                  );
+                })()
+              ) : (
+                <span className="text-sm font-bold text-white">-</span>
+              )}
             </div>
           </div>
         </div>
@@ -1440,6 +1600,20 @@ export default function AthleteDetailPage() {
                 </select>
               </div>
               <div>
+                <label className="block text-xs font-semibold text-gray-400 mb-1">Condicionamento Físico</label>
+                <select
+                  className="w-full glass-input bg-neutral-dark/80 text-xs"
+                  value={editAthlete.nivel_atividade}
+                  onChange={(e) => setEditAthlete({ ...editAthlete, nivel_atividade: e.target.value })}
+                >
+                  {NIVEIS_ATIVIDADE.map(n => (
+                    <option key={n.nivel} value={n.nivel.toString()}>
+                      Nível {n.nivel} - {n.titulo}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
                 <label className="block text-xs font-semibold text-gray-400 mb-1">Telefone Celular</label>
                 <input
                   type="text"
@@ -1592,6 +1766,239 @@ export default function AthleteDetailPage() {
           </div>
         </div>
       )}
+
+      {/* CARD DE AVALIAÇÃO CORPORAL & ACOMPANHAMENTO QUADRIMESTRAL (4 MESES) */}
+      {(() => {
+        const imcValue = calculateIMC(athlete.peso, athlete.altura);
+        const imcCat = getIMCCategory(imcValue);
+        const nivelInfo = getNivelAtividadeInfo(athlete.nivel_atividade);
+        const quadStatus = checkQuadrimestralStatus(athlete.data_ultima_pesagem);
+        const workoutRec = getWorkoutRecommendation(imcValue, athlete.nivel_atividade);
+
+        return (
+          <div className="glass-card p-6 space-y-6 relative overflow-hidden">
+            {/* Header */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/5 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-xl bg-accent/10 border border-accent/20 flex items-center justify-center text-accent">
+                  <Scale className="h-5 w-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-bold text-white">
+                      Perfil Físico & Avaliação Quadrimestral
+                    </h3>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary text-accent border border-accent/20 font-bold">
+                      Ciclo de 4 Meses
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    Monitoramento contínuo de peso, altura, IMC e diretrizes para adaptação do treino.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowHistoryModal(true)}
+                  className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-primary/40 border border-white/10 px-3.5 py-2 text-xs font-semibold text-gray-300 hover:text-white hover:bg-primary/60 transition-colors shadow-sm"
+                >
+                  <HistoryIcon className="h-3.5 w-3.5 text-accent" />
+                  Histórico ({historicoMedicoes.length})
+                </button>
+                {isAdmin && (
+                  <button
+                    type="button"
+                    onClick={handleOpenMedicaoModal}
+                    className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-accent px-4 py-2 text-xs font-bold text-neutral-dark hover:bg-accent/90 transition-colors shadow-md"
+                  >
+                    <PlusCircle className="h-4 w-4" />
+                    Nova Medição
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Banner de Status Quadrimestral */}
+            {quadStatus.isDue ? (
+              <div className="rounded-2xl p-4 bg-gradient-to-r from-amber-500/15 via-red-500/10 to-amber-500/15 border border-amber-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-lg">
+                <div className="flex items-start gap-3">
+                  <div className="p-2 rounded-xl bg-amber-500/20 text-amber-400 shrink-0 mt-0.5">
+                    <AlertCircle className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-amber-300 flex items-center gap-2">
+                      ⚠️ Reavaliação Quadrimestral Recomendada (+4 Meses)
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-200 border border-amber-500/40">
+                        {quadStatus.daysSince ? `${quadStatus.daysSince} dias desde a última pesagem` : 'Sem registro prévio'}
+                      </span>
+                    </h4>
+                    <p className="text-xs text-gray-300 mt-1">
+                      {quadStatus.formattedLastDate !== 'Sem registro' 
+                        ? `A última medição foi feita em ${quadStatus.formattedLastDate}. Completou o ciclo de 120 dias! Atualize as medidas para calibrar a intensidade dos treinos.`
+                        : 'O atleta ainda não possui registro de pesagem quadrimestral. Registre as medidas para acompanhar a evolução física!'}
+                    </p>
+                  </div>
+                </div>
+                {isAdmin && (
+                  <button
+                    type="button"
+                    onClick={handleOpenMedicaoModal}
+                    className="shrink-0 px-4 py-2 rounded-xl bg-amber-400 text-neutral-dark text-xs font-bold hover:bg-amber-300 transition-colors shadow-md flex items-center gap-1.5"
+                  >
+                    <Scale className="h-3.5 w-3.5" />
+                    Atualizar Agora
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="rounded-2xl p-4 bg-emerald-500/10 border border-emerald-500/25 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <div className="flex items-start gap-3">
+                  <div className="p-2 rounded-xl bg-emerald-500/20 text-emerald-400 shrink-0 mt-0.5">
+                    <Check className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-emerald-300 flex items-center gap-2">
+                      Avaliação Quadrimestral em Dia
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                        {quadStatus.daysRemaining} dias restantes
+                      </span>
+                    </h4>
+                    <p className="text-xs text-gray-300 mt-1">
+                      Última pesagem realizada em <strong className="text-white">{quadStatus.formattedLastDate}</strong>. Próxima reavaliação prevista para <strong className="text-white">{quadStatus.formattedNextDate}</strong>.
+                    </p>
+                  </div>
+                </div>
+                {isAdmin && (
+                  <button
+                    type="button"
+                    onClick={handleOpenMedicaoModal}
+                    className="shrink-0 text-xs font-bold text-emerald-400 hover:text-emerald-300 underline underline-offset-2"
+                  >
+                    Atualizar antes do prazo
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Grid com Métricas Físicas */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Card 1: Peso */}
+              <div className="bg-neutral-dark/40 border border-white/5 rounded-2xl p-4 flex flex-col justify-between">
+                <div className="flex items-center justify-between text-gray-400 mb-2">
+                  <span className="text-xs font-semibold">Peso Atual</span>
+                  <Scale className="h-4 w-4 text-accent" />
+                </div>
+                <div className="text-2xl font-black text-white">
+                  {athlete.peso ? `${athlete.peso.toFixed(1)}` : '-'}
+                  <span className="text-xs text-gray-400 font-normal ml-1">kg</span>
+                </div>
+                <span className="text-[10px] text-gray-500 mt-2">
+                  Última medição: {quadStatus.formattedLastDate}
+                </span>
+              </div>
+
+              {/* Card 2: Altura */}
+              <div className="bg-neutral-dark/40 border border-white/5 rounded-2xl p-4 flex flex-col justify-between">
+                <div className="flex items-center justify-between text-gray-400 mb-2">
+                  <span className="text-xs font-semibold">Altura</span>
+                  <Ruler className="h-4 w-4 text-accent" />
+                </div>
+                <div className="text-2xl font-black text-white">
+                  {athlete.altura ? `${athlete.altura.toFixed(2)}` : '-'}
+                  <span className="text-xs text-gray-400 font-normal ml-1">m</span>
+                </div>
+                <span className="text-[10px] text-gray-500 mt-2">
+                  Estatura corporal
+                </span>
+              </div>
+
+              {/* Card 3: IMC */}
+              <div className="bg-neutral-dark/40 border border-white/5 rounded-2xl p-4 flex flex-col justify-between">
+                <div className="flex items-center justify-between text-gray-400 mb-2">
+                  <span className="text-xs font-semibold">Índice IMC</span>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${imcCat.badge} ${imcCat.bg} ${imcCat.border} border`}>
+                    {imcCat.label}
+                  </span>
+                </div>
+                <div className="text-2xl font-black text-white">
+                  {imcValue ? imcValue.toFixed(1) : '-'}
+                  <span className="text-xs text-gray-400 font-normal ml-1">kg/m²</span>
+                </div>
+                <span className="text-[10px] text-gray-400 mt-2 line-clamp-1">
+                  {imcCat.description}
+                </span>
+              </div>
+
+              {/* Card 4: Condicionamento */}
+              <div className="bg-neutral-dark/40 border border-white/5 rounded-2xl p-4 flex flex-col justify-between">
+                <div className="flex items-center justify-between text-gray-400 mb-2">
+                  <span className="text-xs font-semibold">Condicionamento</span>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${nivelInfo.badgeColor}`}>
+                    Nível {nivelInfo.nivel} de 5
+                  </span>
+                </div>
+                <div className="text-sm font-bold text-white leading-tight">
+                  {nivelInfo.titulo}
+                </div>
+                <span className="text-[10px] text-gray-400 mt-2 line-clamp-1">
+                  {nivelInfo.descricao}
+                </span>
+              </div>
+            </div>
+
+            {/* Diretriz de Treino Recomendada para o Professor */}
+            <div className="rounded-2xl bg-gradient-to-br from-primary/30 via-neutral-dark/60 to-black/50 border border-primary-light/30 p-5 space-y-4 shadow-xl">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-white/10 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="h-8 w-8 rounded-lg bg-accent/20 border border-accent/40 flex items-center justify-center text-accent">
+                    <Sparkles className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-white">
+                      Diretrizes de Adaptação de Treino para o Professor
+                    </h4>
+                    <p className="text-[11px] text-gray-400">
+                      Recomendações técnicas geradas a partir do IMC ({imcCat.label}) e Nível de Condicionamento ({nivelInfo.titulo}).
+                    </p>
+                  </div>
+                </div>
+                <div className="self-start sm:self-auto px-3 py-1 rounded-full bg-accent/15 border border-accent/30 text-accent text-xs font-bold">
+                  Foco: {workoutRec.focus}
+                </div>
+              </div>
+
+              <div className="grid sm:grid-cols-2 gap-4">
+                <div>
+                  <h5 className="text-xs font-bold text-accent uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                    <Check className="h-3.5 w-3.5" />
+                    Conduta & Estímulos Recomendados:
+                  </h5>
+                  <ul className="space-y-1.5">
+                    {workoutRec.guidelines.map((guide, idx) => (
+                      <li key={idx} className="text-xs text-gray-300 flex items-start gap-2">
+                        <span className="h-1.5 w-1.5 rounded-full bg-accent mt-1.5 shrink-0" />
+                        <span>{guide}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div className="rounded-xl bg-amber-500/10 border border-amber-500/20 p-3.5 space-y-1.5">
+                  <h5 className="text-xs font-bold text-amber-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <AlertCircle className="h-3.5 w-3.5 text-amber-400" />
+                    Atenção & Cuidados do Treinador:
+                  </h5>
+                  <p className="text-xs text-gray-300 leading-relaxed">
+                    {workoutRec.precautions}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Treinos da Semana Card (Flexível / Dia a Dia) */}
       <div className="glass-card p-6 space-y-6">
@@ -2379,6 +2786,252 @@ export default function AthleteDetailPage() {
           </div>
         )}
       </div>
+
+      {/* Modal: Registrar Nova Medição Quadrimestral */}
+      {quadrimestralModalOpen && (
+        <div className="fixed inset-0 z-55 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="glass-card w-full max-w-xl p-6 border-l-4 border-l-accent relative max-h-[92vh] overflow-y-auto space-y-5">
+            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+              <div>
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  <Scale className="h-5 w-5 text-accent" />
+                  Nova Medição Quadrimestral (4 Meses)
+                </h3>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  Atualize as medidas corporais de <strong>{athlete.nome}</strong> para calibrar treinos e recalcular o IMC.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setQuadrimestralModalOpen(false)}
+                className="text-gray-400 hover:text-white p-1 rounded-lg hover:bg-white/5"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Live IMC preview */}
+            {(() => {
+              const p = parseFloat(medicaoPeso.replace(',', '.'));
+              const a = parseFloat(medicaoAltura.replace(',', '.'));
+              const liveIMC = calculateIMC(p, a);
+              const liveCat = getIMCCategory(liveIMC);
+
+              return (
+                <div className="p-3.5 rounded-xl bg-neutral-dark/60 border border-white/10 flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] text-gray-400 uppercase font-semibold block">
+                      Prévia do IMC
+                    </span>
+                    <span className="text-lg font-black text-white">
+                      {liveIMC ? `${liveIMC.toFixed(1)} kg/m²` : 'Preencha peso e altura'}
+                    </span>
+                  </div>
+                  {liveIMC && (
+                    <span className={`text-xs font-bold px-3 py-1 rounded-full ${liveCat.badge} ${liveCat.bg} ${liveCat.border} border`}>
+                      {liveCat.label}
+                    </span>
+                  )}
+                </div>
+              );
+            })()}
+
+            <form onSubmit={handleSaveMedicao} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-gray-300 mb-1">
+                    Peso Atual (kg) *
+                  </label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    required
+                    placeholder="Ex: 68.5"
+                    className="w-full glass-input text-sm"
+                    value={medicaoPeso}
+                    onChange={(e) => setMedicaoPeso(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-300 mb-1">
+                    Altura (m ou cm) *
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    required
+                    placeholder="Ex: 1.75 ou 175"
+                    className="w-full glass-input text-sm"
+                    value={medicaoAltura}
+                    onChange={(e) => setMedicaoAltura(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-300 mb-2">
+                  Nível de Condicionamento Físico Atual:
+                </label>
+                <div className="space-y-2">
+                  {NIVEIS_ATIVIDADE.map((n) => {
+                    const isSelected = medicaoNivel === n.nivel;
+                    return (
+                      <div
+                        key={n.nivel}
+                        onClick={() => setMedicaoNivel(n.nivel)}
+                        className={`p-3 rounded-xl border cursor-pointer transition-all flex items-center justify-between ${
+                          isSelected
+                            ? 'bg-accent/15 border-accent text-white shadow-md'
+                            : 'bg-neutral-dark/30 border-white/5 text-gray-300 hover:border-white/20'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className={`h-7 w-7 rounded-full flex items-center justify-center font-bold text-xs ${
+                            isSelected ? 'bg-accent text-neutral-dark' : 'bg-white/10 text-gray-400'
+                          }`}>
+                            {n.nivel}
+                          </div>
+                          <div>
+                            <span className="text-xs font-bold block">{n.titulo}</span>
+                            <span className="text-[10px] text-gray-400">{n.descricao}</span>
+                          </div>
+                        </div>
+                        {isSelected && <Check className="h-4 w-4 text-accent shrink-0" />}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-300 mb-1">
+                  Observações da Medição Quadrimestral
+                </label>
+                <textarea
+                  rows={2}
+                  className="w-full glass-input text-xs"
+                  placeholder="Ex: Aluno perdeu 2kg, melhorou disposição aeróbica, sentindo dores na panturrilha..."
+                  value={medicaoObs}
+                  onChange={(e) => setMedicaoObs(e.target.value)}
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 border-t border-white/10 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setQuadrimestralModalOpen(false)}
+                  className="px-4 py-2 text-xs font-bold text-gray-400 hover:text-white"
+                  disabled={savingMedicao}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingMedicao}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 text-xs font-bold bg-accent text-neutral-dark rounded-xl hover:bg-accent/90 transition-colors shadow-md disabled:opacity-50"
+                >
+                  {savingMedicao ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                  {savingMedicao ? 'Salvando...' : 'Salvar Nova Medição'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Histórico de Medições Quadrimestrais */}
+      {showHistoryModal && (
+        <div className="fixed inset-0 z-55 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="glass-card w-full max-w-2xl p-6 border-l-4 border-l-accent relative max-h-[90vh] overflow-y-auto space-y-4">
+            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+              <div>
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  <HistoryIcon className="h-5 w-5 text-accent" />
+                  Histórico de Medições Quadrimestrais
+                </h3>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  Evolução corporal e física de <strong>{athlete.nome}</strong> ao longo do tempo.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowHistoryModal(false)}
+                className="text-gray-400 hover:text-white p-1 rounded-lg hover:bg-white/5"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {historicoMedicoes.length === 0 ? (
+              <div className="text-center py-12 text-gray-400 text-xs">
+                Nenhuma medição gravada ainda no histórico deste atleta.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {historicoMedicoes.map((med, index) => {
+                  const imcCat = getIMCCategory(med.imc);
+                  const nivelInfo = getNivelAtividadeInfo(med.nivel_atividade);
+                  return (
+                    <div
+                      key={med.id || index}
+                      className="p-4 rounded-xl bg-neutral-dark/50 border border-white/10 space-y-2 hover:border-white/20 transition-colors"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-white flex items-center gap-2">
+                          <Calendar className="h-3.5 w-3.5 text-accent" />
+                          {new Date(med.data_medicao + 'T00:00').toLocaleDateString('pt-BR')}
+                        </span>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${imcCat.badge} ${imcCat.bg} ${imcCat.border} border`}>
+                          {imcCat.label}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-4 gap-2 bg-black/20 p-2.5 rounded-lg text-center">
+                        <div>
+                          <span className="text-[9px] text-gray-400 block">Peso</span>
+                          <span className="text-xs font-bold text-white">{med.peso.toFixed(1)} kg</span>
+                        </div>
+                        <div>
+                          <span className="text-[9px] text-gray-400 block">Altura</span>
+                          <span className="text-xs font-bold text-white">{med.altura.toFixed(2)} m</span>
+                        </div>
+                        <div>
+                          <span className="text-[9px] text-gray-400 block">IMC</span>
+                          <span className="text-xs font-bold text-accent">{med.imc.toFixed(1)}</span>
+                        </div>
+                        <div>
+                          <span className="text-[9px] text-gray-400 block">Nível</span>
+                          <span className="text-xs font-bold text-white">Nível {med.nivel_atividade}</span>
+                        </div>
+                      </div>
+
+                      <div className="text-[11px] text-gray-400">
+                        <strong>Condicionamento:</strong> {nivelInfo.titulo}
+                      </div>
+
+                      {med.observacoes && (
+                        <p className="text-xs text-gray-300 bg-black/30 p-2 rounded border border-white/5">
+                          {med.observacoes}
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            <div className="flex justify-end border-t border-white/10 pt-3">
+              <button
+                type="button"
+                onClick={() => setShowHistoryModal(false)}
+                className="px-4 py-2 text-xs font-bold bg-primary border border-white/10 text-white rounded-lg hover:bg-primary/80"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

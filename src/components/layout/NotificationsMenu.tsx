@@ -15,10 +15,12 @@ import {
   ExternalLink,
   CheckCircle2,
   Sparkles,
-  Loader2
+  Loader2,
+  Scale
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
+import { checkQuadrimestralStatus } from '@/lib/imc';
 
 export interface NotificationItem {
   id: string;
@@ -27,7 +29,7 @@ export interface NotificationItem {
   description: string;
   date: string;
   link: string;
-  iconType: 'user' | 'dumbbell' | 'alert' | 'card' | 'chart' | 'video' | 'sparkle';
+  iconType: 'user' | 'dumbbell' | 'alert' | 'card' | 'chart' | 'video' | 'sparkle' | 'scale';
   badge?: string;
   badgeColor?: 'emerald' | 'amber' | 'rose' | 'blue' | 'purple';
 }
@@ -210,11 +212,41 @@ export default function NotificationsMenu() {
           });
         }
 
+        // 5. Quadrimestral Physical Re-evaluation Alert (+4 meses)
+        const { data: athletesForReval } = await supabase
+          .from('atletas')
+          .select('id, nome, data_ultima_pesagem, created_at')
+          .eq('status', 'ativo')
+          .limit(20);
+
+        if (athletesForReval && athletesForReval.length > 0) {
+          const dueAthletes = athletesForReval.filter(a => {
+            const check = checkQuadrimestralStatus(a.data_ultima_pesagem);
+            return check.isDue;
+          });
+
+          if (dueAthletes.length > 0) {
+            dueAthletes.slice(0, 3).forEach(ath => {
+              items.push({
+                id: `quadrimestral-due-${ath.id}`,
+                type: 'avaliacao',
+                title: '⚠️ Reavaliação Quadrimestral (+4 meses)',
+                description: `${ath.nome} completou o ciclo de 4 meses sem nova pesagem. É hora de recalcular o IMC e adaptar o treino!`,
+                date: ath.data_ultima_pesagem || ath.created_at || new Date().toISOString(),
+                link: `/atletas/${ath.id}`,
+                iconType: 'scale',
+                badge: 'Reavaliar',
+                badgeColor: 'amber',
+              });
+            });
+          }
+        }
+
       } else {
         // STUDENT / ATHLETE NOTIFICATIONS
         const { data: athlete } = await supabase
           .from('atletas')
-          .select('id, nome')
+          .select('id, nome, data_ultima_pesagem')
           .eq('usuario_id', user.id)
           .maybeSingle();
 
@@ -325,6 +357,24 @@ export default function NotificationsMenu() {
               badgeColor: p.status === 'atrasado' ? 'rose' : 'amber',
             });
           }
+
+          // 5. Student Quadrimestral Re-evaluation Alert
+          if (athlete.data_ultima_pesagem !== undefined) {
+            const check = checkQuadrimestralStatus(athlete.data_ultima_pesagem);
+            if (check.isDue) {
+              items.push({
+                id: `student-quadrimestral-due-${athlete.id}`,
+                type: 'avaliacao',
+                title: '⚖️ Reavaliação Física Quadrimestral',
+                description: 'Completou 4 meses desde sua última pesagem! Procure o professor para atualizar suas medidas e calibrar seus treinos.',
+                date: athlete.data_ultima_pesagem || new Date().toISOString(),
+                link: `/atletas/${athlete.id}`,
+                iconType: 'scale',
+                badge: '4 Meses',
+                badgeColor: 'purple',
+              });
+            }
+          }
         }
       }
 
@@ -433,6 +483,8 @@ export default function NotificationsMenu() {
         return <div className={cls}><TrendingUp className="h-4 w-4" /></div>;
       case 'video':
         return <div className={cls}><Video className="h-4 w-4" /></div>;
+      case 'scale':
+        return <div className={cls}><Scale className="h-4 w-4" /></div>;
       default:
         return <div className={cls}><Sparkles className="h-4 w-4" /></div>;
     }
