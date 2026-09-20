@@ -3,9 +3,25 @@
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { ClipboardCheck, Users, Calendar, AlertCircle, FileText, CheckCircle2, Copy, Save } from 'lucide-react';
+import {
+  ClipboardCheck,
+  Users,
+  Calendar,
+  AlertCircle,
+  FileText,
+  CheckCircle2,
+  Copy,
+  Save,
+  Trophy
+} from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { todayLocalISODate, parseLocalDate } from '@/lib/date';
+import PhysicalScoreCards, {
+  PhysicalScores,
+  calculateTotalPoints,
+  getPointsCategory,
+  SCORE_LEVELS,
+} from '@/components/athletes/PhysicalScoreCards';
 
 interface Athlete {
   id: string;
@@ -14,8 +30,6 @@ interface Athlete {
   posicao: string;
 }
 
-
-
 export default function EvaluationsPage() {
   const router = useRouter();
   const { isAdmin, user } = useAuth();
@@ -23,10 +37,18 @@ export default function EvaluationsPage() {
   const [selectedAthleteId, setSelectedAthleteId] = useState<string>('');
   const [loading, setLoading] = useState(true);
 
-  // Evaluation form attributes
+  // Physical capabilities attributes (1 to 5 scale as requested in reference image)
+  const [physicalScores, setPhysicalScores] = useState<PhysicalScores>({
+    resistencia: 3,
+    equilibrio: 3,
+    flexibilidade: 3,
+    coordenacao_motora: 3,
+    potencia: 3,
+  });
+
+  // Complementary Evaluation attributes (1 to 10 scale)
   const [notaTecnica, setNotaTecnica] = useState(7.0);
   const [notaTatica, setNotaTatica] = useState(7.0);
-  const [notaFisica, setNotaFisica] = useState(7.0);
   const [notaComportamental, setNotaComportamental] = useState(7.0);
   const [observacoes, setObservacoes] = useState('');
 
@@ -99,6 +121,12 @@ export default function EvaluationsPage() {
     nota_tatica: number;
     nota_fisica: number;
     nota_comportamental: number;
+    resistencia: number;
+    equilibrio: number;
+    flexibilidade: number;
+    coordenacao_motora: number;
+    potencia: number;
+    pontos_total: number;
     observacoes: string | null;
   }) => {
     try {
@@ -122,14 +150,23 @@ export default function EvaluationsPage() {
     setSubmitting(true);
     const athlete = athletes.find(a => a.id === selectedAthleteId);
 
+    const totalPts = calculateTotalPoints(physicalScores);
+    const calculatedNotaFisica = Math.round(((totalPts / 25) * 10) * 10) / 10;
+
     const evaluationData = {
       atleta_id: selectedAthleteId,
       treinador_id: user?.id ?? null,
       data_avaliacao: todayLocalISODate(),
       nota_tecnica: Number(notaTecnica),
       nota_tatica: Number(notaTatica),
-      nota_fisica: Number(notaFisica),
+      nota_fisica: calculatedNotaFisica,
       nota_comportamental: Number(notaComportamental),
+      resistencia: physicalScores.resistencia,
+      equilibrio: physicalScores.equilibrio,
+      flexibilidade: physicalScores.flexibilidade,
+      coordenacao_motora: physicalScores.coordenacao_motora,
+      potencia: physicalScores.potencia,
+      pontos_total: totalPts,
       observacoes: observacoes || null,
     };
 
@@ -158,23 +195,43 @@ export default function EvaluationsPage() {
       nota_tatica: number;
       nota_fisica: number;
       nota_comportamental: number;
+      resistencia: number;
+      equilibrio: number;
+      flexibilidade: number;
+      coordenacao_motora: number;
+      potencia: number;
+      pontos_total: number;
       data_avaliacao: string;
       observacoes?: string | null;
     }
   ) => {
     const media = ((data.nota_tecnica + data.nota_tatica + data.nota_fisica + data.nota_comportamental) / 4).toFixed(1);
+    const cat = getPointsCategory(data.pontos_total);
+
     const textReport = `===========================================
-RELATÓRIO DE AVALIAÇÃO TÉCNICA - WINNER'S MINDSET
+RELATÓRIO DE AVALIAÇÃO FÍSICA E TÉCNICA
+WINNER'S MINDSET / LEGIONÁRIOS
 ===========================================
 Atleta: ${athlete?.nome || 'Atleta não especificado'}
 Categoria: ${athlete?.categoria || 'N/A'} | Posição: ${athlete?.posicao || 'N/A'}
 Data da Avaliação: ${parseLocalDate(data.data_avaliacao).toLocaleDateString('pt-BR')}
 -------------------------------------------
-NOTAS (Escala 1 a 10):
-- Nota Técnica: ${data.nota_tecnica.toFixed(1)}
-- Nota Tática: ${data.nota_tatica.toFixed(1)}
-- Nota Física: ${data.nota_fisica.toFixed(1)}
-- Nota Comportamental: ${data.nota_comportamental.toFixed(1)}
+PONTUAÇÃO FÍSICA DO ATLETA:
+Pontos Totais: ${data.pontos_total} / 25 pontos
+Classificação: ${cat.label}
+
+Capacidades Motoras (Escala 1 a 5):
+🫁 Resistência: ${data.resistencia} (${SCORE_LEVELS[data.resistencia]?.label || ''})
+⚖️ Equilíbrio: ${data.equilibrio} (${SCORE_LEVELS[data.equilibrio]?.label || ''})
+🤸 Flexibilidade: ${data.flexibilidade} (${SCORE_LEVELS[data.flexibilidade]?.label || ''})
+🎯 Coordenação Motora: ${data.coordenacao_motora} (${SCORE_LEVELS[data.coordenacao_motora]?.label || ''})
+🦵 Potência: ${data.potencia} (${SCORE_LEVELS[data.potencia]?.label || ''})
+-------------------------------------------
+NOTAS GERAIS (Escala 1 a 10):
+- Capacidade Técnica: ${data.nota_tecnica.toFixed(1)}
+- Capacidade Tática: ${data.nota_tatica.toFixed(1)}
+- Capacidade Física: ${data.nota_fisica.toFixed(1)} (Convertida da pontuação motora)
+- Aspecto Comportamental: ${data.nota_comportamental.toFixed(1)}
 -------------------------------------------
 MÉDIA GERAL: ${media} / 10.0
 -------------------------------------------
@@ -194,9 +251,15 @@ ${data.observacoes || 'Nenhuma observação inserida.'}
 
   const resetForm = () => {
     setReport(null);
+    setPhysicalScores({
+      resistencia: 3,
+      equilibrio: 3,
+      flexibilidade: 3,
+      coordenacao_motora: 3,
+      potencia: 3,
+    });
     setNotaTecnica(7.0);
     setNotaTatica(7.0);
-    setNotaFisica(7.0);
     setNotaComportamental(7.0);
     setObservacoes('');
     setSaveError(false);
@@ -213,7 +276,7 @@ ${data.observacoes || 'Nenhuma observação inserida.'}
       {/* Header */}
       <div>
         <h2 className="text-2xl font-bold tracking-tight text-white">Ficha de Avaliação de Desempenho</h2>
-        <p className="text-sm text-gray-400">Avalie os atletas e gere relatórios técnicos instantaneamente.</p>
+        <p className="text-sm text-gray-400">Avalie as 5 capacidades físicas do atleta e gere relatórios técnicos instantâneos.</p>
       </div>
 
       {loading ? (
@@ -279,24 +342,26 @@ ${data.observacoes || 'Nenhuma observação inserida.'}
                 Selecione o Atleta
               </label>
               <select
-                className="w-full glass-input bg-neutral-dark/80 text-sm font-semibold"
+                className="w-full glass-input bg-neutral-dark/80 text-sm"
                 value={selectedAthleteId}
                 onChange={(e) => setSelectedAthleteId(e.target.value)}
               >
-                {athletes.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.nome} ({a.categoria} - {a.posicao})
+                {athletes.map((athlete) => (
+                  <option key={athlete.id} value={athlete.id}>
+                    {athlete.nome} — {athlete.posicao} ({athlete.categoria})
                   </option>
                 ))}
               </select>
             </div>
+
             <div>
               <label className="block text-xs font-bold text-gray-400 mb-1.5 flex items-center">
                 <Calendar className="h-4 w-4 text-accent mr-1.5" />
-                Data de Lançamento
+                Data da Avaliação
               </label>
               <input
                 type="text"
+                readOnly
                 disabled
                 className="w-full glass-input bg-neutral-dark/30 text-gray-500 cursor-not-allowed text-sm"
                 value={new Date().toLocaleDateString('pt-BR')}
@@ -304,55 +369,75 @@ ${data.observacoes || 'Nenhuma observação inserida.'}
             </div>
           </div>
 
-          {/* Metric sliders */}
-          <div className="space-y-5 border-t border-b border-white/5 py-6">
-            {[
-              {
-                label: 'Capacidade Técnica',
-                desc: 'Controle de bola, passe, chute, cabeceio, drible e passe de primeira.',
-                val: notaTecnica,
-                setVal: setNotaTecnica,
-              },
-              {
-                label: 'Capacidade Tática',
-                desc: 'Leitura de jogo, posicionamento defensivo/ofensivo, transição e cobertura.',
-                val: notaTatica,
-                setVal: setNotaTatica,
-              },
-              {
-                label: 'Capacidade Física',
-                desc: 'Velocidade, aceleração, força de explosão, resistência aeróbica e agilidade.',
-                val: notaFisica,
-                setVal: setNotaFisica,
-              },
-              {
-                label: 'Aspecto Comportamental',
-                desc: 'Disciplina, liderança, espírito de equipe, foco e resiliência pós-erro.',
-                val: notaComportamental,
-                setVal: setNotaComportamental,
-              },
-            ].map((metric, i) => (
-              <div key={i} className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-3 bg-neutral-dark/45 rounded-xl border border-white/5">
-                <div className="flex-1 space-y-1">
-                  <h4 className="font-bold text-white text-sm">{metric.label}</h4>
-                  <p className="text-[10px] text-gray-400 leading-relaxed max-w-md">{metric.desc}</p>
-                </div>
-                <div className="flex items-center space-x-4">
-                  <input
-                    type="range"
-                    min="1.0"
-                    max="10.0"
-                    step="0.1"
-                    className="w-40 h-1 bg-primary/30 rounded-lg appearance-none cursor-pointer accent-accent"
-                    value={metric.val}
-                    onChange={(e) => metric.setVal(parseFloat(e.target.value))}
-                  />
-                  <span className={`w-12 py-1 text-center font-bold text-xs rounded border ${getScoreColor(metric.val)}`}>
-                    {metric.val.toFixed(1)}
-                  </span>
-                </div>
+          {/* Physical Capabilities 5-score selection with points total */}
+          <div className="space-y-3 border-t border-white/5 pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  <Trophy className="h-5 w-5 text-accent" />
+                  Capacidades Físicas & Motoras
+                </h3>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  Clique na nota de 1 a 5 para cada capacidade. A pontuação total de 25 pontos calibra o nível atlético.
+                </p>
               </div>
-            ))}
+            </div>
+
+            <PhysicalScoreCards
+              scores={physicalScores}
+              onChange={setPhysicalScores}
+              showPointsHeader
+            />
+          </div>
+
+          {/* Complementary Aspects (Técnica, Tática, Comportamental) */}
+          <div className="space-y-4 border-t border-b border-white/5 py-6">
+            <h3 className="text-sm font-bold text-white uppercase tracking-wider text-gray-300">
+              Aspectos Complementares (Escala 1 a 10)
+            </h3>
+            <div className="space-y-3">
+              {[
+                {
+                  label: 'Capacidade Técnica',
+                  desc: 'Controle de bola, passe, chute, cabeceio, drible e passe de primeira.',
+                  val: notaTecnica,
+                  setVal: setNotaTecnica,
+                },
+                {
+                  label: 'Capacidade Tática',
+                  desc: 'Leitura de jogo, posicionamento defensivo/ofensivo, transição e cobertura.',
+                  val: notaTatica,
+                  setVal: setNotaTatica,
+                },
+                {
+                  label: 'Aspecto Comportamental',
+                  desc: 'Disciplina, liderança, espírito de equipe, foco e resiliência pós-erro.',
+                  val: notaComportamental,
+                  setVal: setNotaComportamental,
+                },
+              ].map((metric, i) => (
+                <div key={i} className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-3 bg-neutral-dark/45 rounded-xl border border-white/5">
+                  <div className="flex-1 space-y-1">
+                    <h4 className="font-bold text-white text-sm">{metric.label}</h4>
+                    <p className="text-[10px] text-gray-400 leading-relaxed max-w-md">{metric.desc}</p>
+                  </div>
+                  <div className="flex items-center space-x-4">
+                    <input
+                      type="range"
+                      min="1.0"
+                      max="10.0"
+                      step="0.1"
+                      className="w-40 h-1 bg-primary/30 rounded-lg appearance-none cursor-pointer accent-accent"
+                      value={metric.val}
+                      onChange={(e) => metric.setVal(parseFloat(e.target.value))}
+                    />
+                    <span className={`w-12 py-1 text-center font-bold text-xs rounded border ${getScoreColor(metric.val)}`}>
+                      {metric.val.toFixed(1)}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
 
           {/* Qualitative Notes */}

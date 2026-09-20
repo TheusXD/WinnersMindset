@@ -37,7 +37,8 @@ import {
   Ruler,
   Sparkles,
   Clock,
-  History as HistoryIcon
+  History as HistoryIcon,
+  Trophy
 } from 'lucide-react';
 import { fileToOptimizedDataUrl } from '@/lib/image-upload';
 import {
@@ -62,6 +63,12 @@ import {
   getWorkoutRecommendation,
   checkQuadrimestralStatus
 } from '@/lib/imc';
+
+import PhysicalScoreCards, {
+  PhysicalScores,
+  calculateTotalPoints,
+  getPointsCategory
+} from '@/components/athletes/PhysicalScoreCards';
 
 interface Athlete {
   id: string;
@@ -100,6 +107,12 @@ interface Evaluation {
   nota_tatica: number;
   nota_fisica: number;
   nota_comportamental: number;
+  resistencia?: number | null;
+  equilibrio?: number | null;
+  flexibilidade?: number | null;
+  coordenacao_motora?: number | null;
+  potencia?: number | null;
+  pontos_total?: number | null;
   observacoes: string | null;
   data_avaliacao: string;
 }
@@ -194,8 +207,14 @@ const DEFAULT_EVALUATIONS: Evaluation[] = [
     id: '1',
     nota_tecnica: 8.5,
     nota_tatica: 7.0,
-    nota_fisica: 9.0,
+    nota_fisica: 8.8,
     nota_comportamental: 8.0,
+    resistencia: 4,
+    equilibrio: 4,
+    flexibilidade: 4,
+    coordenacao_motora: 5,
+    potencia: 5,
+    pontos_total: 22,
     observacoes: 'Excelente força física e explosão, boa finalização de perna direita. Precisa melhorar posicionamento em impedimentos.',
     data_avaliacao: '2026-05-27',
   },
@@ -203,8 +222,14 @@ const DEFAULT_EVALUATIONS: Evaluation[] = [
     id: '2',
     nota_tecnica: 9.0,
     nota_tatica: 7.5,
-    nota_fisica: 9.0,
+    nota_fisica: 9.2,
     nota_comportamental: 8.5,
+    resistencia: 5,
+    equilibrio: 4,
+    flexibilidade: 4,
+    coordenacao_motora: 5,
+    potencia: 5,
+    pontos_total: 23,
     observacoes: 'Evolução tática visível nos treinos de movimentação em pivô.',
     data_avaliacao: '2026-06-06',
   }
@@ -550,18 +575,30 @@ export default function AthleteDetailPage() {
   // --- Evaluation Modal States ---
   const [isEvaluating, setIsEvaluating] = useState(false);
   const [savingEval, setSavingEval] = useState(false);
+  const [evalPhysicalScores, setEvalPhysicalScores] = useState<PhysicalScores>({
+    resistencia: 3,
+    equilibrio: 3,
+    flexibilidade: 3,
+    coordenacao_motora: 3,
+    potencia: 3,
+  });
   const [evalNotaTecnica, setEvalNotaTecnica] = useState(7.0);
   const [evalNotaTatica, setEvalNotaTatica] = useState(7.0);
-  const [evalNotaFisica, setEvalNotaFisica] = useState(7.0);
   const [evalNotaComportamental, setEvalNotaComportamental] = useState(7.0);
   const [evalObservacoes, setEvalObservacoes] = useState('');
   const [evalSuccess, setEvalSuccess] = useState(false);
   const [evalSaveError, setEvalSaveError] = useState(false);
 
   const handleOpenEvalModal = () => {
+    setEvalPhysicalScores({
+      resistencia: 3,
+      equilibrio: 3,
+      flexibilidade: 3,
+      coordenacao_motora: 3,
+      potencia: 3,
+    });
     setEvalNotaTecnica(7.0);
     setEvalNotaTatica(7.0);
-    setEvalNotaFisica(7.0);
     setEvalNotaComportamental(7.0);
     setEvalObservacoes('');
     setEvalSuccess(false);
@@ -575,14 +612,23 @@ export default function AthleteDetailPage() {
     setSavingEval(true);
 
     const today = todayLocalISODate();
+    const totalPts = calculateTotalPoints(evalPhysicalScores);
+    const calculatedNotaFisica = Math.round(((totalPts / 25) * 10) * 10) / 10;
+
     const evalPayload = {
       atleta_id: athlete.id,
       treinador_id: user?.id ?? null,
       data_avaliacao: today,
       nota_tecnica: Number(evalNotaTecnica),
       nota_tatica: Number(evalNotaTatica),
-      nota_fisica: Number(evalNotaFisica),
+      nota_fisica: calculatedNotaFisica,
       nota_comportamental: Number(evalNotaComportamental),
+      resistencia: evalPhysicalScores.resistencia,
+      equilibrio: evalPhysicalScores.equilibrio,
+      flexibilidade: evalPhysicalScores.flexibilidade,
+      coordenacao_motora: evalPhysicalScores.coordenacao_motora,
+      potencia: evalPhysicalScores.potencia,
+      pontos_total: totalPts,
       observacoes: evalObservacoes || null,
     };
 
@@ -1080,7 +1126,7 @@ export default function AthleteDetailPage() {
         // Fetch evaluations
         const { data: evalData, error: evalError } = await supabase
           .from('avaliacoes')
-          .select('id, nota_tecnica, nota_tatica, nota_fisica, nota_comportamental, observacoes, data_avaliacao')
+          .select('id, nota_tecnica, nota_tatica, nota_fisica, nota_comportamental, resistencia, equilibrio, flexibilidade, coordenacao_motora, potencia, pontos_total, observacoes, data_avaliacao')
           .eq('atleta_id', id)
           .order('data_avaliacao', { ascending: false });
 
@@ -1304,19 +1350,34 @@ export default function AthleteDetailPage() {
      today.getDate() >= birthDate.getDate());
   if (!hasBirthdayPassed) age--;
 
-  // Radar chart data based on latest evaluation
+  // Physical capabilities and radar chart data based on latest evaluation
   const latestEval = evaluations[0] || {
     nota_tecnica: 7.0,
     nota_tatica: 7.0,
     nota_fisica: 7.0,
     nota_comportamental: 7.0,
+    resistencia: 4,
+    equilibrio: 3,
+    flexibilidade: 4,
+    coordenacao_motora: 4,
+    potencia: 5,
+    pontos_total: 20,
+  };
+
+  const latestPhysicalScores: PhysicalScores = {
+    resistencia: latestEval.resistencia ?? 4,
+    equilibrio: latestEval.equilibrio ?? 3,
+    flexibilidade: latestEval.flexibilidade ?? 4,
+    coordenacao_motora: latestEval.coordenacao_motora ?? 4,
+    potencia: latestEval.potencia ?? 5,
   };
 
   const radarData = [
-    { subject: 'Técnica', A: Number(latestEval.nota_tecnica), fullMark: 10 },
-    { subject: 'Tática', A: Number(latestEval.nota_tatica), fullMark: 10 },
-    { subject: 'Física', A: Number(latestEval.nota_fisica), fullMark: 10 },
-    { subject: 'Comport.', A: Number(latestEval.nota_comportamental), fullMark: 10 },
+    { subject: 'Resistência', A: Number(latestPhysicalScores.resistencia), fullMark: 5 },
+    { subject: 'Equilíbrio', A: Number(latestPhysicalScores.equilibrio), fullMark: 5 },
+    { subject: 'Flexibilidade', A: Number(latestPhysicalScores.flexibilidade), fullMark: 5 },
+    { subject: 'Coordenação', A: Number(latestPhysicalScores.coordenacao_motora), fullMark: 5 },
+    { subject: 'Potência', A: Number(latestPhysicalScores.potencia), fullMark: 5 },
   ];
 
   // Goals and assists for bar chart
@@ -2587,54 +2648,82 @@ export default function AthleteDetailPage() {
       )}
 
       {/* Analytics and Performance */}
-      <div className="grid md:grid-cols-2 gap-6">
-        {/* Radar Chart (Attributes) */}
-        <div className="glass-card p-5">
-          <h3 className="text-sm font-bold text-white mb-4 flex items-center">
-            <Award className="h-4 w-4 text-accent mr-2" />
-            Atributos de Desempenho (Última Avaliação)
-          </h3>
-          <div className="h-64 w-full flex items-center justify-center">
-            {mounted ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <RadarChart cx="50%" cy="50%" outerRadius="75%" data={radarData}>
-                  <PolarGrid stroke="rgba(255,255,255,0.08)" />
-                  <PolarAngleAxis dataKey="subject" tick={{ fill: '#9ca3af', fontSize: 11, fontWeight: '600' }} />
-                  <PolarRadiusAxis angle={30} domain={[0, 10]} tick={{ fill: '#4b5563', fontSize: 9 }} />
-                  <Radar name={athlete.nome} dataKey="A" stroke="#20c997" fill="#20c997" fillOpacity={0.35} />
-                </RadarChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="text-gray-500 text-xs">Carregando gráfico...</div>
+      <div className="grid lg:grid-cols-12 gap-6">
+        {/* Physical Capabilities Score Cards for Coach */}
+        <div className="lg:col-span-7 glass-card p-5 space-y-4">
+          <div className="flex items-center justify-between border-b border-white/5 pb-3">
+            <h3 className="text-sm font-bold text-white flex items-center">
+              <Award className="h-4 w-4 text-accent mr-2" />
+              Capacidades Físicas & Notas (Última Avaliação)
+            </h3>
+            {isAdmin && (
+              <button
+                onClick={handleOpenEvalModal}
+                className="text-xs font-bold text-accent hover:text-accent/80 transition-colors flex items-center gap-1.5 bg-accent/10 px-3 py-1.5 rounded-xl border border-accent/20 hover:bg-accent/20"
+              >
+                <PlusCircle className="h-3.5 w-3.5" />
+                Nova Avaliação
+              </button>
             )}
           </div>
+          <PhysicalScoreCards scores={latestPhysicalScores} readOnly showPointsHeader compact />
         </div>
 
-        {/* Goals and Assists Chart */}
-        <div className="glass-card p-5">
-          <h3 className="text-sm font-bold text-white mb-4 flex items-center">
-            <Activity className="h-4 w-4 text-accent mr-2" />
-            Estatísticas em Jogos Recentes
-          </h3>
-          <div className="h-64 w-full flex items-center justify-center">
-            {!mounted || loading ? (
-              <div className="text-gray-500 text-xs">Carregando gráfico...</div>
-            ) : gameStats.length === 0 ? (
-              <div className="text-gray-500 text-xs flex flex-col items-center justify-center h-full">
-                <span>Nenhuma estatística de partida cadastrada para este atleta.</span>
-              </div>
-            ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={matchesData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                  <XAxis dataKey="name" stroke="#9ca3af" fontSize={10} tickLine={false} />
-                  <YAxis stroke="#9ca3af" fontSize={10} tickLine={false} allowDecimals={false} />
-                  <Tooltip contentStyle={{ backgroundColor: '#161c18', border: '1px solid rgba(32, 201, 151, 0.15)' }} />
-                  <Legend verticalAlign="top" height={36} iconSize={8} />
-                  <Bar dataKey="Gols" fill="#20c997" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="Assist" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            )}
+        {/* Radar Chart & Matches */}
+        <div className="lg:col-span-5 space-y-6">
+          {/* Radar Chart (Attributes) */}
+          <div className="glass-card p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-bold text-white flex items-center">
+                <Activity className="h-4 w-4 text-accent mr-2" />
+                Radar Físico (Escala 1 a 5)
+              </h3>
+              <span className="text-[10px] text-gray-400 font-semibold px-2.5 py-0.5 rounded-full bg-white/5 border border-white/10">
+                Total: {calculateTotalPoints(latestPhysicalScores)}/25 pts
+              </span>
+            </div>
+            <div className="h-60 w-full flex items-center justify-center">
+              {mounted ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <RadarChart cx="50%" cy="50%" outerRadius="75%" data={radarData}>
+                    <PolarGrid stroke="rgba(255,255,255,0.08)" />
+                    <PolarAngleAxis dataKey="subject" tick={{ fill: '#9ca3af', fontSize: 11, fontWeight: '600' }} />
+                    <PolarRadiusAxis angle={30} domain={[0, 5]} tick={{ fill: '#4b5563', fontSize: 9 }} />
+                    <Radar name={athlete.nome} dataKey="A" stroke="#20c997" fill="#20c997" fillOpacity={0.35} />
+                  </RadarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="text-gray-500 text-xs">Carregando gráfico...</div>
+              )}
+            </div>
+          </div>
+
+          {/* Goals and Assists Chart */}
+          <div className="glass-card p-5">
+            <h3 className="text-sm font-bold text-white mb-4 flex items-center">
+              <TrendingUp className="h-4 w-4 text-accent mr-2" />
+              Estatísticas em Jogos Recentes
+            </h3>
+            <div className="h-48 w-full flex items-center justify-center">
+              {!mounted || loading ? (
+                <div className="text-gray-500 text-xs">Carregando gráfico...</div>
+              ) : gameStats.length === 0 ? (
+                <div className="text-gray-500 text-xs flex flex-col items-center justify-center h-full">
+                  <span>Nenhuma estatística de partida cadastrada para este atleta.</span>
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={matchesData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                    <XAxis dataKey="name" stroke="#9ca3af" fontSize={10} tickLine={false} />
+                    <YAxis stroke="#9ca3af" fontSize={10} tickLine={false} allowDecimals={false} />
+                    <Tooltip contentStyle={{ backgroundColor: '#161c18', border: '1px solid rgba(32, 201, 151, 0.15)' }} />
+                    <Legend verticalAlign="top" height={36} iconSize={8} />
+                    <Bar dataKey="Gols" fill="#20c997" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="Assist" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -2642,14 +2731,25 @@ export default function AthleteDetailPage() {
       {/* Evaluation Modal */}
       {isEvaluating && athlete && (
         <div className="fixed inset-0 z-55 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 overflow-y-auto">
-          <div className="glass-card w-full max-w-xl p-6 border-l-4 border-l-accent relative max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center gap-2 mb-4">
-              <ClipboardCheck className="h-5 w-5 text-accent" />
-              <h3 className="text-lg font-bold text-white">Nova Avaliação de Desempenho</h3>
+          <div className="glass-card w-full max-w-2xl p-6 border-l-4 border-l-accent relative max-h-[90vh] overflow-y-auto space-y-5">
+            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+              <div className="flex items-center gap-2">
+                <ClipboardCheck className="h-5 w-5 text-accent" />
+                <div>
+                  <h3 className="text-lg font-bold text-white">Nova Avaliação de Desempenho</h3>
+                  <p className="text-xs text-gray-400">
+                    Avaliando: <strong className="text-white">{athlete.nome}</strong> — {athlete.posicao} ({athlete.categoria})
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsEvaluating(false)}
+                className="text-gray-400 hover:text-white p-1 rounded-lg hover:bg-white/5"
+              >
+                <X className="h-5 w-5" />
+              </button>
             </div>
-            <p className="text-xs text-gray-400 mb-4">
-              Avaliando: <strong className="text-white">{athlete.nome}</strong> — {athlete.posicao} ({athlete.categoria})
-            </p>
 
             {evalSuccess ? (
               <div className="flex flex-col items-center justify-center py-8 space-y-3 text-center">
@@ -2680,31 +2780,51 @@ export default function AthleteDetailPage() {
                 </button>
               </div>
             ) : (
-              <form onSubmit={handleSaveNewEvaluation} className="space-y-5">
-                {[
-                  { label: 'Capacidade Técnica', desc: 'Controle de bola, passe, chute e drible.', val: evalNotaTecnica, setVal: setEvalNotaTecnica },
-                  { label: 'Capacidade Tática', desc: 'Leitura de jogo, posicionamento e cobertura.', val: evalNotaTatica, setVal: setEvalNotaTatica },
-                  { label: 'Capacidade Física', desc: 'Velocidade, força, resistência e agilidade.', val: evalNotaFisica, setVal: setEvalNotaFisica },
-                  { label: 'Aspecto Comportamental', desc: 'Disciplina, liderança e espírito de equipe.', val: evalNotaComportamental, setVal: setEvalNotaComportamental },
-                ].map((metric, i) => (
-                  <div key={i} className="p-3 bg-neutral-dark/45 rounded-xl border border-white/5 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h4 className="font-bold text-white text-sm">{metric.label}</h4>
-                        <p className="text-[10px] text-gray-400">{metric.desc}</p>
+              <form onSubmit={handleSaveNewEvaluation} className="space-y-6">
+                {/* Physical Capabilities Selection (1 to 5 scale as in user reference) */}
+                <div className="space-y-2">
+                  <h4 className="text-xs font-bold text-accent uppercase tracking-wider flex items-center gap-1.5">
+                    <Trophy className="h-4 w-4" />
+                    Capacidades Físicas (Escala 1 a 5)
+                  </h4>
+                  <PhysicalScoreCards
+                    scores={evalPhysicalScores}
+                    onChange={setEvalPhysicalScores}
+                    showPointsHeader
+                  />
+                </div>
+
+                {/* Additional Dimensions */}
+                <div className="space-y-3 pt-2 border-t border-white/5">
+                  <h4 className="text-xs font-bold text-gray-300 uppercase tracking-wider">
+                    Aspectos Complementares (Escala 1 a 10)
+                  </h4>
+                  <div className="grid sm:grid-cols-3 gap-3">
+                    {[
+                      { label: 'Técnica', desc: 'Passe, drible e chute', val: evalNotaTecnica, setVal: setEvalNotaTecnica },
+                      { label: 'Tática', desc: 'Visão e posicionamento', val: evalNotaTatica, setVal: setEvalNotaTatica },
+                      { label: 'Comportamental', desc: 'Disciplina e liderança', val: evalNotaComportamental, setVal: setEvalNotaComportamental },
+                    ].map((metric, i) => (
+                      <div key={i} className="p-3 bg-neutral-dark/45 rounded-xl border border-white/5 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <h5 className="font-bold text-white text-xs">{metric.label}</h5>
+                            <p className="text-[9px] text-gray-400">{metric.desc}</p>
+                          </div>
+                          <span className={`w-10 py-0.5 text-center font-bold text-xs rounded border ${getScoreColor(metric.val)}`}>
+                            {metric.val.toFixed(1)}
+                          </span>
+                        </div>
+                        <input
+                          type="range" min="1.0" max="10.0" step="0.1"
+                          className="w-full h-1 bg-primary/30 rounded-lg appearance-none cursor-pointer accent-accent"
+                          value={metric.val}
+                          onChange={(e) => metric.setVal(parseFloat(e.target.value))}
+                        />
                       </div>
-                      <span className={`w-12 py-1 text-center font-bold text-xs rounded border ${getScoreColor(metric.val)}`}>
-                        {metric.val.toFixed(1)}
-                      </span>
-                    </div>
-                    <input
-                      type="range" min="1.0" max="10.0" step="0.1"
-                      className="w-full h-1 bg-primary/30 rounded-lg appearance-none cursor-pointer accent-accent"
-                      value={metric.val}
-                      onChange={(e) => metric.setVal(parseFloat(e.target.value))}
-                    />
+                    ))}
                   </div>
-                ))}
+                </div>
 
                 <div>
                   <label className="block text-xs font-bold text-gray-400 mb-1.5">Observações Gerais (Qualitativo)</label>
@@ -2750,39 +2870,80 @@ export default function AthleteDetailPage() {
           <p className="text-xs text-gray-500 py-4">Nenhuma avaliação realizada ainda.</p>
         ) : (
           <div className="space-y-4">
-            {evaluations.map((evalItem, index) => (
-              <div key={evalItem.id} className="p-4 bg-neutral-dark/40 rounded-xl border border-white/5 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-accent font-semibold">
-                    Avaliação #{evaluations.length - index}
-                  </span>
-                  <span className="text-[10px] text-gray-500 flex items-center">
-                    <Calendar className="h-3 w-3 mr-1" />
-                    {new Date(evalItem.data_avaliacao + 'T00:00').toLocaleDateString('pt-BR')}
-                  </span>
-                </div>
-                
-                <div className="grid grid-cols-4 gap-2 text-center bg-primary/10 rounded-lg p-2.5">
-                  {[
-                    { label: 'Téc.', val: evalItem.nota_tecnica },
-                    { label: 'Tát.', val: evalItem.nota_tatica },
-                    { label: 'Fís.', val: evalItem.nota_fisica },
-                    { label: 'Comp.', val: evalItem.nota_comportamental },
-                  ].map((metric, i) => (
-                    <div key={i}>
-                      <span className="block text-[9px] text-gray-400">{metric.label}</span>
-                      <span className="text-sm font-bold text-accent">{Number(metric.val).toFixed(1)}</span>
-                    </div>
-                  ))}
-                </div>
+            {evaluations.map((evalItem, index) => {
+              const itemTotal = evalItem.pontos_total ?? (
+                (evalItem.resistencia || 3) +
+                (evalItem.equilibrio || 3) +
+                (evalItem.flexibilidade || 3) +
+                (evalItem.coordenacao_motora || 3) +
+                (evalItem.potencia || 3)
+              );
+              const cat = getPointsCategory(itemTotal);
 
-                {evalItem.observacoes && (
-                  <p className="text-xs text-gray-300 leading-relaxed bg-black/20 p-2.5 rounded border border-white/5">
-                    <strong className="text-white">Observações:</strong> {evalItem.observacoes}
-                  </p>
-                )}
-              </div>
-            ))}
+              return (
+                <div key={evalItem.id} className="p-4 bg-neutral-dark/40 rounded-xl border border-white/5 space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-accent font-semibold">
+                        Avaliação #{evaluations.length - index}
+                      </span>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${cat.badgeClass}`}>
+                        {itemTotal} / 25 pts • {cat.label}
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-gray-500 flex items-center">
+                      <Calendar className="h-3 w-3 mr-1" />
+                      {new Date(evalItem.data_avaliacao + 'T00:00').toLocaleDateString('pt-BR')}
+                    </span>
+                  </div>
+                  
+                  {/* Physical Capabilities 5-score row */}
+                  <div className="grid grid-cols-5 gap-2 text-center bg-white/[0.02] border border-white/5 rounded-lg p-2">
+                    <div>
+                      <span className="block text-[9px] text-gray-400">🫁 Resistência</span>
+                      <span className="text-xs font-bold text-white">{evalItem.resistencia ?? '-'}</span>
+                    </div>
+                    <div>
+                      <span className="block text-[9px] text-gray-400">⚖️ Equilíbrio</span>
+                      <span className="text-xs font-bold text-white">{evalItem.equilibrio ?? '-'}</span>
+                    </div>
+                    <div>
+                      <span className="block text-[9px] text-gray-400">🤸 Flexibilidade</span>
+                      <span className="text-xs font-bold text-white">{evalItem.flexibilidade ?? '-'}</span>
+                    </div>
+                    <div>
+                      <span className="block text-[9px] text-gray-400">🎯 Coordenação</span>
+                      <span className="text-xs font-bold text-white">{evalItem.coordenacao_motora ?? '-'}</span>
+                    </div>
+                    <div>
+                      <span className="block text-[9px] text-gray-400">🦵 Potência</span>
+                      <span className="text-xs font-bold text-white">{evalItem.potencia ?? '-'}</span>
+                    </div>
+                  </div>
+
+                  {/* Classical grades row */}
+                  <div className="grid grid-cols-4 gap-2 text-center bg-primary/10 rounded-lg p-2">
+                    {[
+                      { label: 'Téc.', val: evalItem.nota_tecnica },
+                      { label: 'Tát.', val: evalItem.nota_tatica },
+                      { label: 'Fís.', val: evalItem.nota_fisica },
+                      { label: 'Comp.', val: evalItem.nota_comportamental },
+                    ].map((metric, i) => (
+                      <div key={i}>
+                        <span className="block text-[9px] text-gray-400">{metric.label}</span>
+                        <span className="text-xs font-bold text-accent">{Number(metric.val).toFixed(1)}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {evalItem.observacoes && (
+                    <p className="text-xs text-gray-300 leading-relaxed bg-black/20 p-2.5 rounded border border-white/5">
+                      <strong className="text-white">Observações:</strong> {evalItem.observacoes}
+                    </p>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
