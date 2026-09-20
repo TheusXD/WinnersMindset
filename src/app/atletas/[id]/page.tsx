@@ -1828,7 +1828,62 @@ export default function AthleteDetailPage() {
         </div>
       )}
 
-      {/* CARD DE AVALIAÇÃO CORPORAL & ACOMPANHAMENTO QUADRIMESTRAL (4 MESES) */}
+      {/* 1. CAPACIDADES FÍSICAS & NOTAS (ESCALA 1 A 5, 25 PONTOS TOTAIS) */}
+      <div className="grid lg:grid-cols-12 gap-6">
+        {/* Physical Capabilities Score Cards for Coach & Athlete */}
+        <div className="lg:col-span-7 glass-card p-5 space-y-4">
+          <div className="flex items-center justify-between border-b border-white/5 pb-3">
+            <div>
+              <h3 className="text-sm font-bold text-white flex items-center">
+                <Award className="h-4 w-4 text-accent mr-2" />
+                Capacidades Físicas & Notas (Última Avaliação)
+              </h3>
+              <p className="text-xs text-gray-400 mt-0.5">
+                Avaliação motora nas 5 capacidades físicas fundamentais (Escala de 1 a 5).
+              </p>
+            </div>
+            {isAdmin && (
+              <button
+                onClick={handleOpenEvalModal}
+                className="text-xs font-bold text-accent hover:text-accent/80 transition-colors flex items-center gap-1.5 bg-accent/10 px-3 py-1.5 rounded-xl border border-accent/20 hover:bg-accent/20"
+              >
+                <PlusCircle className="h-3.5 w-3.5" />
+                Nova Avaliação
+              </button>
+            )}
+          </div>
+          <PhysicalScoreCards scores={latestPhysicalScores} readOnly showPointsHeader compact />
+        </div>
+
+        {/* Radar Chart (Attributes) */}
+        <div className="lg:col-span-5 glass-card p-5 flex flex-col justify-between">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-bold text-white flex items-center">
+              <Activity className="h-4 w-4 text-accent mr-2" />
+              Radar Físico (Escala 1 a 5)
+            </h3>
+            <span className="text-[10px] text-gray-400 font-semibold px-2.5 py-0.5 rounded-full bg-white/5 border border-white/10">
+              Total: {calculateTotalPoints(latestPhysicalScores)}/25 pts
+            </span>
+          </div>
+          <div className="h-64 w-full flex items-center justify-center">
+            {mounted ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <RadarChart cx="50%" cy="50%" outerRadius="75%" data={radarData}>
+                  <PolarGrid stroke="rgba(255,255,255,0.08)" />
+                  <PolarAngleAxis dataKey="subject" tick={{ fill: '#9ca3af', fontSize: 11, fontWeight: '600' }} />
+                  <PolarRadiusAxis angle={30} domain={[0, 5]} tick={{ fill: '#4b5563', fontSize: 9 }} />
+                  <Radar name={athlete.nome} dataKey="A" stroke="#20c997" fill="#20c997" fillOpacity={0.35} />
+                </RadarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="text-gray-500 text-xs">Carregando gráfico...</div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* 2. CARD DE AVALIAÇÃO CORPORAL & ACOMPANHAMENTO QUADRIMESTRAL (4 MESES) */}
       {(() => {
         const imcValue = calculateIMC(athlete.peso, athlete.altura);
         const imcCat = getIMCCategory(imcValue);
@@ -2647,84 +2702,31 @@ export default function AthleteDetailPage() {
         </div>
       )}
 
-      {/* Analytics and Performance */}
-      <div className="grid lg:grid-cols-12 gap-6">
-        {/* Physical Capabilities Score Cards for Coach */}
-        <div className="lg:col-span-7 glass-card p-5 space-y-4">
-          <div className="flex items-center justify-between border-b border-white/5 pb-3">
-            <h3 className="text-sm font-bold text-white flex items-center">
-              <Award className="h-4 w-4 text-accent mr-2" />
-              Capacidades Físicas & Notas (Última Avaliação)
-            </h3>
-            {isAdmin && (
-              <button
-                onClick={handleOpenEvalModal}
-                className="text-xs font-bold text-accent hover:text-accent/80 transition-colors flex items-center gap-1.5 bg-accent/10 px-3 py-1.5 rounded-xl border border-accent/20 hover:bg-accent/20"
-              >
-                <PlusCircle className="h-3.5 w-3.5" />
-                Nova Avaliação
-              </button>
-            )}
-          </div>
-          <PhysicalScoreCards scores={latestPhysicalScores} readOnly showPointsHeader compact />
-        </div>
-
-        {/* Radar Chart & Matches */}
-        <div className="lg:col-span-5 space-y-6">
-          {/* Radar Chart (Attributes) */}
-          <div className="glass-card p-5">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-bold text-white flex items-center">
-                <Activity className="h-4 w-4 text-accent mr-2" />
-                Radar Físico (Escala 1 a 5)
-              </h3>
-              <span className="text-[10px] text-gray-400 font-semibold px-2.5 py-0.5 rounded-full bg-white/5 border border-white/10">
-                Total: {calculateTotalPoints(latestPhysicalScores)}/25 pts
-              </span>
+      {/* Estatísticas em Jogos Recentes */}
+      <div className="glass-card p-5">
+        <h3 className="text-sm font-bold text-white mb-4 flex items-center">
+          <TrendingUp className="h-4 w-4 text-accent mr-2" />
+          Estatísticas em Jogos Recentes
+        </h3>
+        <div className="h-60 w-full flex items-center justify-center">
+          {!mounted || loading ? (
+            <div className="text-gray-500 text-xs">Carregando gráfico...</div>
+          ) : gameStats.length === 0 ? (
+            <div className="text-gray-500 text-xs flex flex-col items-center justify-center h-full">
+              <span>Nenhuma estatística de partida cadastrada para este atleta.</span>
             </div>
-            <div className="h-60 w-full flex items-center justify-center">
-              {mounted ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <RadarChart cx="50%" cy="50%" outerRadius="75%" data={radarData}>
-                    <PolarGrid stroke="rgba(255,255,255,0.08)" />
-                    <PolarAngleAxis dataKey="subject" tick={{ fill: '#9ca3af', fontSize: 11, fontWeight: '600' }} />
-                    <PolarRadiusAxis angle={30} domain={[0, 5]} tick={{ fill: '#4b5563', fontSize: 9 }} />
-                    <Radar name={athlete.nome} dataKey="A" stroke="#20c997" fill="#20c997" fillOpacity={0.35} />
-                  </RadarChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="text-gray-500 text-xs">Carregando gráfico...</div>
-              )}
-            </div>
-          </div>
-
-          {/* Goals and Assists Chart */}
-          <div className="glass-card p-5">
-            <h3 className="text-sm font-bold text-white mb-4 flex items-center">
-              <TrendingUp className="h-4 w-4 text-accent mr-2" />
-              Estatísticas em Jogos Recentes
-            </h3>
-            <div className="h-48 w-full flex items-center justify-center">
-              {!mounted || loading ? (
-                <div className="text-gray-500 text-xs">Carregando gráfico...</div>
-              ) : gameStats.length === 0 ? (
-                <div className="text-gray-500 text-xs flex flex-col items-center justify-center h-full">
-                  <span>Nenhuma estatística de partida cadastrada para este atleta.</span>
-                </div>
-              ) : (
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={matchesData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                    <XAxis dataKey="name" stroke="#9ca3af" fontSize={10} tickLine={false} />
-                    <YAxis stroke="#9ca3af" fontSize={10} tickLine={false} allowDecimals={false} />
-                    <Tooltip contentStyle={{ backgroundColor: '#161c18', border: '1px solid rgba(32, 201, 151, 0.15)' }} />
-                    <Legend verticalAlign="top" height={36} iconSize={8} />
-                    <Bar dataKey="Gols" fill="#20c997" radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="Assist" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              )}
-            </div>
-          </div>
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={matchesData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <XAxis dataKey="name" stroke="#9ca3af" fontSize={10} tickLine={false} />
+                <YAxis stroke="#9ca3af" fontSize={10} tickLine={false} allowDecimals={false} />
+                <Tooltip contentStyle={{ backgroundColor: '#161c18', border: '1px solid rgba(32, 201, 151, 0.15)' }} />
+                <Legend verticalAlign="top" height={36} iconSize={8} />
+                <Bar dataKey="Gols" fill="#20c997" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="Assist" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
         </div>
       </div>
 

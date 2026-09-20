@@ -9,6 +9,10 @@ import {
   MapPin, Users, ArrowLeft, ArrowRight, Loader2, CheckCircle,
   Activity, Scale, Ruler, Sparkles
 } from 'lucide-react';
+import PhysicalScoreCards, {
+  PhysicalScores,
+  calculateTotalPoints
+} from '@/components/athletes/PhysicalScoreCards';
 import { 
   NIVEIS_ATIVIDADE, 
   calculateIMC, 
@@ -41,7 +45,13 @@ export default function CadastroPage() {
   // Step 3: Physical & Conditioning Profile
   const [peso, setPeso] = useState('');
   const [altura, setAltura] = useState('');
-  const [nivelAtividade, setNivelAtividade] = useState<number>(1);
+  const [physicalScores, setPhysicalScores] = useState<PhysicalScores>({
+    resistencia: 3,
+    equilibrio: 3,
+    flexibilidade: 3,
+    coordenacao_motora: 3,
+    potencia: 3,
+  });
 
   // Step 4: Family & Address
   const [nomePai, setNomePai] = useState('');
@@ -120,7 +130,14 @@ export default function CadastroPage() {
   const parsedAltura = altura ? parseFloat(altura.replace(',', '.')) : null;
   const imcCalculado = calculateIMC(parsedPeso, parsedAltura);
   const imcInfo = getIMCCategory(imcCalculado);
-  const nivelInfo = getNivelAtividadeInfo(nivelAtividade);
+
+  const totalPontos = calculateTotalPoints(physicalScores);
+  const derivedNivelAtividade = 
+    totalPontos >= 22 ? 5 :
+    totalPontos >= 17 ? 4 :
+    totalPontos >= 12 ? 3 :
+    totalPontos >= 9 ? 2 : 1;
+  const nivelInfo = getNivelAtividadeInfo(derivedNivelAtividade);
 
   async function handleRegister(e: React.FormEvent) {
     e.preventDefault();
@@ -146,7 +163,13 @@ export default function CadastroPage() {
           data: {
             peso: parsedPeso,
             altura: parsedAltura,
-            nivel_atividade: nivelAtividade,
+            nivel_atividade: derivedNivelAtividade,
+            resistencia: physicalScores.resistencia,
+            equilibrio: physicalScores.equilibrio,
+            flexibilidade: physicalScores.flexibilidade,
+            coordenacao_motora: physicalScores.coordenacao_motora,
+            potencia: physicalScores.potencia,
+            pontos_total: totalPontos,
           },
         },
       });
@@ -190,7 +213,13 @@ export default function CadastroPage() {
             status: 'pendente',
             peso: parsedPeso,
             altura: parsedAltura,
-            nivel_atividade: nivelAtividade,
+            nivel_atividade: derivedNivelAtividade,
+            resistencia: physicalScores.resistencia,
+            equilibrio: physicalScores.equilibrio,
+            flexibilidade: physicalScores.flexibilidade,
+            coordenacao_motora: physicalScores.coordenacao_motora,
+            potencia: physicalScores.potencia,
+            pontos_total: totalPontos,
           });
 
         if (dbError) throw dbError;
@@ -205,6 +234,8 @@ export default function CadastroPage() {
         setError('Este e-mail já está cadastrado no sistema. Tente fazer login ou use outro e-mail.');
       } else if (msg.toLowerCase().includes('failed to fetch') || msg.toLowerCase().includes('network') || msg.toLowerCase().includes('load failed')) {
         setError('Não foi possível conectar ao servidor. Verifique sua conexão e tente novamente.');
+      } else if (msg.toLowerCase().includes('row-level security') || msg.toLowerCase().includes('violates row-level')) {
+        setError('Erro de permissão ao registrar solicitação. Tente novamente.');
       } else {
         setError(msg || 'Ocorreu um erro ao enviar seu cadastro.');
       }
@@ -239,7 +270,7 @@ export default function CadastroPage() {
               Passo {step} de 4: {
                 step === 1 ? 'Dados de Acesso' :
                 step === 2 ? 'Dados Pessoais' :
-                step === 3 ? 'Perfil Físico & IMC' : 'Endereço e Responsáveis'
+                step === 3 ? 'Perfil Físico & Capacidades' : 'Endereço e Responsáveis'
               }
             </div>
           </div>
@@ -395,50 +426,24 @@ export default function CadastroPage() {
               </div>
             )}
 
-            {/* Conditioning Level Selector (1 to 5) */}
-            <div>
-              <label className="block text-xs font-semibold text-gray-400 mb-2 flex items-center gap-1.5">
-                <Activity className="h-4 w-4 text-accent" />
-                Como você classifica seu nível de atividade física atual?
-              </label>
-              <div className="space-y-2">
-                {NIVEIS_ATIVIDADE.map((item) => {
-                  const isSelected = nivelAtividade === item.nivel;
-                  return (
-                    <button
-                      key={item.nivel}
-                      type="button"
-                      onClick={() => setNivelAtividade(item.nivel)}
-                      className={`w-full text-left p-3 rounded-xl border transition-all flex items-center justify-between gap-3 ${
-                        isSelected 
-                          ? 'bg-accent/15 border-accent shadow-lg shadow-accent/5' 
-                          : 'bg-neutral-light/30 border-white/5 hover:bg-neutral-light/60'
-                      }`}
-                    >
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className={`text-xs font-bold px-2 py-0.5 rounded-md ${
-                            isSelected ? 'bg-accent text-neutral-dark' : 'bg-white/10 text-gray-300'
-                          }`}>
-                            {item.sublabel}
-                          </span>
-                          <span className={`text-xs font-bold ${isSelected ? 'text-white' : 'text-gray-300'}`}>
-                            {item.label}
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-gray-400 mt-1 line-clamp-1">
-                          {item.descricao}
-                        </p>
-                      </div>
-                      <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
-                        isSelected ? 'border-accent bg-accent' : 'border-white/20'
-                      }`}>
-                        {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-neutral-dark" />}
-                      </div>
-                    </button>
-                  );
-                })}
+            {/* Capacidades Físicas (Escala 1 a 5 - Total 25 Pontos) */}
+            <div className="pt-3 border-t border-white/5 space-y-3">
+              <div>
+                <h4 className="text-xs font-bold text-white flex items-center gap-1.5 uppercase tracking-wider">
+                  <Activity className="h-4 w-4 text-accent" />
+                  Autoavaliação das Capacidades Físicas (Escala 1 a 5)
+                </h4>
+                <p className="text-[11px] text-gray-400 mt-0.5">
+                  Classifique seu nível atual nas 5 capacidades para o professor calibrar os treinos.
+                </p>
               </div>
+
+              <PhysicalScoreCards
+                scores={physicalScores}
+                onChange={setPhysicalScores}
+                showPointsHeader={true}
+                compact={false}
+              />
             </div>
 
             <div className="pt-4 flex justify-between gap-3">

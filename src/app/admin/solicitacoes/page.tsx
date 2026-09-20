@@ -15,6 +15,10 @@ import {
   getNivelAtividadeInfo, 
   getWorkoutRecommendation 
 } from '@/lib/imc';
+import PhysicalScoreCards, {
+  PhysicalScores,
+  calculateTotalPoints
+} from '@/components/athletes/PhysicalScoreCards';
 
 interface Solicitacao {
   id: string;
@@ -32,6 +36,12 @@ interface Solicitacao {
   peso?: number | null;
   altura?: number | null;
   nivel_atividade?: number | null;
+  resistencia?: number | null;
+  equilibrio?: number | null;
+  flexibilidade?: number | null;
+  coordenacao_motora?: number | null;
+  potencia?: number | null;
+  pontos_total?: number | null;
   created_at: string;
 }
 
@@ -154,6 +164,37 @@ export default function AdminSolicitacoesPage() {
               nivel_atividade: selectedReq.nivel_atividade || 1,
               data_medicao: todayIso,
               observacoes: 'Medição inicial captada no cadastro do atleta',
+            });
+        }
+
+        // 2.2 Salvar autoavaliação inicial na tabela avaliacoes
+        if (athleteId) {
+          const reqScores: PhysicalScores = {
+            resistencia: selectedReq.resistencia ?? 3,
+            equilibrio: selectedReq.equilibrio ?? 3,
+            flexibilidade: selectedReq.flexibilidade ?? 3,
+            coordenacao_motora: selectedReq.coordenacao_motora ?? 3,
+            potencia: selectedReq.potencia ?? 3,
+          };
+          const pts = selectedReq.pontos_total || calculateTotalPoints(reqScores);
+          const notaFisica10 = Number(((pts / 25) * 10).toFixed(1));
+
+          await supabase
+            .from('avaliacoes')
+            .insert({
+              atleta_id: athleteId,
+              resistencia: reqScores.resistencia,
+              equilibrio: reqScores.equilibrio,
+              flexibilidade: reqScores.flexibilidade,
+              coordenacao_motora: reqScores.coordenacao_motora,
+              potencia: reqScores.potencia,
+              pontos_total: pts,
+              nota_fisica: notaFisica10,
+              nota_tecnica: 7.0,
+              nota_tatica: 7.0,
+              nota_comportamental: 7.0,
+              observacoes: 'Autoavaliação inicial preenchida pelo aluno no momento do cadastro.',
+              data_avaliacao: todayIso,
             });
         }
       }
@@ -292,6 +333,11 @@ export default function AdminSolicitacoesPage() {
                     </div>
 
                     <div className="flex items-center gap-2">
+                      {req.pontos_total && (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-accent/15 border border-accent/30 text-accent">
+                          {req.pontos_total}/25 pts
+                        </span>
+                      )}
                       {imc && (
                         <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${imcInfo.borderColor} ${imcInfo.color} ${imcInfo.bgColor}`}>
                           IMC: {imc} ({imcInfo.label})
@@ -383,6 +429,26 @@ export default function AdminSolicitacoesPage() {
                 </span>
                 <span className="block text-[10px] text-gray-300">({selectedIMCCat.label})</span>
               </div>
+            </div>
+
+            {/* Autoavaliação das Capacidades Físicas (Escala 1 a 5, 25 Pontos Totais) */}
+            <div className="space-y-2 p-3.5 rounded-xl bg-white/5 border border-white/10">
+              <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                <Activity className="h-4 w-4 text-accent" />
+                Autoavaliação das Capacidades Físicas (1 a 5)
+              </span>
+              <PhysicalScoreCards
+                scores={{
+                  resistencia: selectedReq.resistencia ?? 3,
+                  equilibrio: selectedReq.equilibrio ?? 3,
+                  flexibilidade: selectedReq.flexibilidade ?? 3,
+                  coordenacao_motora: selectedReq.coordenacao_motora ?? 3,
+                  potencia: selectedReq.potencia ?? 3,
+                }}
+                readOnly={true}
+                showPointsHeader={true}
+                compact={true}
+              />
             </div>
 
             {/* Conditioning level badge */}

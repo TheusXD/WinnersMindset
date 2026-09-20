@@ -142,6 +142,12 @@ export async function POST(
         peso,
         altura,
         nivel_atividade,
+        resistencia,
+        equilibrio,
+        flexibilidade,
+        coordenacao_motora,
+        potencia,
+        pontos_total,
       } = body;
 
       if (!email || !password || !nome) {
@@ -189,12 +195,22 @@ export async function POST(
       const parsedAltura = altura ? parseFloat(altura) : null;
       const parsedNivel = nivel_atividade ? parseInt(nivel_atividade, 10) : 1;
 
+      const parsedResistencia = resistencia ? parseInt(resistencia, 10) : 3;
+      const parsedEquilibrio = equilibrio ? parseInt(equilibrio, 10) : 3;
+      const parsedFlexibilidade = flexibilidade ? parseInt(flexibilidade, 10) : 3;
+      const parsedCoordenacao = coordenacao_motora ? parseInt(coordenacao_motora, 10) : 3;
+      const parsedPotencia = potencia ? parseInt(potencia, 10) : 3;
+      const parsedPontosTotal = pontos_total 
+        ? parseInt(pontos_total, 10) 
+        : (parsedResistencia + parsedEquilibrio + parsedFlexibilidade + parsedCoordenacao + parsedPotencia);
+
       await execute(
         `INSERT INTO solicitacoes_cadastro (
           id, usuario_id, email, nome, telefone, data_nascimento, 
           cpf, rg, nome_pai, nome_mae, endereco, status, posicao, categoria,
-          peso, altura, nivel_atividade
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          peso, altura, nivel_atividade,
+          resistencia, equilibrio, flexibilidade, coordenacao_motora, potencia, pontos_total
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           solicitacaoId,
           userId,
@@ -213,6 +229,12 @@ export async function POST(
           parsedPeso,
           parsedAltura,
           parsedNivel,
+          parsedResistencia,
+          parsedEquilibrio,
+          parsedFlexibilidade,
+          parsedCoordenacao,
+          parsedPotencia,
+          parsedPontosTotal,
         ]
       );
 

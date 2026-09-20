@@ -30,8 +30,22 @@ import {
   Check,
   CheckCircle,
   Camera,
-  Upload
+  Upload,
+  Scale,
+  Trophy
 } from 'lucide-react';
+import PhysicalScoreCards, {
+  PhysicalScores,
+  calculateTotalPoints,
+  getPointsCategory
+} from '@/components/athletes/PhysicalScoreCards';
+import {
+  calculateIMC,
+  getIMCCategory,
+  getNivelAtividadeInfo,
+  checkQuadrimestralStatus,
+  getWorkoutRecommendation
+} from '@/lib/imc';
 import { fileToOptimizedDataUrl } from '@/lib/image-upload';
 import {
   Radar,
@@ -102,6 +116,8 @@ interface StudentAthlete {
   telefone_responsavel?: string | null;
   historico_medico?: string | null;
   usuario_id?: string | null;
+  nivel_atividade?: number | null;
+  data_ultima_pesagem?: string | null;
 }
 
 interface StudentPayment {
@@ -119,6 +135,12 @@ interface StudentEvaluation {
   nota_tatica: number;
   nota_fisica: number;
   nota_comportamental: number;
+  resistencia?: number | null;
+  equilibrio?: number | null;
+  flexibilidade?: number | null;
+  coordenacao_motora?: number | null;
+  potencia?: number | null;
+  pontos_total?: number | null;
   observacoes: string | null;
   data_avaliacao: string;
 }
@@ -639,13 +661,28 @@ interface WeeklyAthleteWorkout {
       nota_tatica: 7.0,
       nota_fisica: 7.0,
       nota_comportamental: 7.0,
+      resistencia: 4,
+      equilibrio: 3,
+      flexibilidade: 4,
+      coordenacao_motora: 4,
+      potencia: 5,
+      pontos_total: 20,
+    };
+
+    const latestPhysicalScores: PhysicalScores = {
+      resistencia: latestEval.resistencia ?? 4,
+      equilibrio: latestEval.equilibrio ?? 3,
+      flexibilidade: latestEval.flexibilidade ?? 4,
+      coordenacao_motora: latestEval.coordenacao_motora ?? 4,
+      potencia: latestEval.potencia ?? 5,
     };
 
     const radarData = [
-      { subject: 'Técnica', A: Number(latestEval.nota_tecnica), fullMark: 10 },
-      { subject: 'Tática', A: Number(latestEval.nota_tatica), fullMark: 10 },
-      { subject: 'Física', A: Number(latestEval.nota_fisica), fullMark: 10 },
-      { subject: 'Comport.', A: Number(latestEval.nota_comportamental), fullMark: 10 },
+      { subject: 'Resistência', A: Number(latestPhysicalScores.resistencia), fullMark: 5 },
+      { subject: 'Equilíbrio', A: Number(latestPhysicalScores.equilibrio), fullMark: 5 },
+      { subject: 'Flexibilidade', A: Number(latestPhysicalScores.flexibilidade), fullMark: 5 },
+      { subject: 'Coordenação', A: Number(latestPhysicalScores.coordenacao_motora), fullMark: 5 },
+      { subject: 'Potência', A: Number(latestPhysicalScores.potencia), fullMark: 5 },
     ];
 
     // Calculate age
@@ -1235,21 +1272,40 @@ interface WeeklyAthleteWorkout {
           )}
         </div>
 
-        {/* Evolution section for Student */}
-        <div className="grid md:grid-cols-2 gap-6">
+        {/* 1. Capacidades Físicas & Pontuação do Atleta (1 a 5, 25 Pontos Totais) */}
+        <div className="grid lg:grid-cols-12 gap-6">
+          {/* Physical Capabilities Score Cards */}
+          <div className="lg:col-span-7 glass-card p-5 space-y-4">
+            <div className="border-b border-white/5 pb-3">
+              <h3 className="text-sm font-bold text-white flex items-center">
+                <Award className="h-4 w-4 text-accent mr-2" />
+                Minhas Capacidades Físicas & Notas (Última Avaliação)
+              </h3>
+              <p className="text-xs text-gray-400 mt-0.5">
+                Avaliação detalhada pelo professor nas 5 capacidades motoras fundamentais.
+              </p>
+            </div>
+            <PhysicalScoreCards scores={latestPhysicalScores} readOnly showPointsHeader compact />
+          </div>
+
           {/* Radar Chart (Attributes) */}
-          <div className="glass-card p-5">
-            <h3 className="text-sm font-bold text-white mb-4 flex items-center">
-              <Award className="h-4 w-4 text-accent mr-2" />
-              Meu Gráfico de Evolução (Última Avaliação)
-            </h3>
+          <div className="lg:col-span-5 glass-card p-5 flex flex-col justify-between">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-sm font-bold text-white flex items-center">
+                <Trophy className="h-4 w-4 text-accent mr-2" />
+                Radar Físico (Escala 1 a 5)
+              </h3>
+              <span className="text-[10px] text-gray-400 font-semibold px-2.5 py-0.5 rounded-full bg-white/5 border border-white/10">
+                Total: {calculateTotalPoints(latestPhysicalScores)}/25 pts
+              </span>
+            </div>
             <div className="h-64 w-full flex items-center justify-center">
               {mounted ? (
                 <ResponsiveContainer width="100%" height="100%">
                   <RadarChart cx="50%" cy="50%" outerRadius="75%" data={radarData}>
                     <PolarGrid stroke="rgba(255,255,255,0.08)" />
                     <PolarAngleAxis dataKey="subject" tick={{ fill: '#9ca3af', fontSize: 11, fontWeight: '600' }} />
-                    <PolarRadiusAxis angle={30} domain={[0, 10]} tick={{ fill: '#4b5563', fontSize: 9 }} />
+                    <PolarRadiusAxis angle={30} domain={[0, 5]} tick={{ fill: '#4b5563', fontSize: 9 }} />
                     <Radar name={studentAthlete.nome} dataKey="A" stroke="#20c997" fill="#20c997" fillOpacity={0.35} />
                   </RadarChart>
                 </ResponsiveContainer>
@@ -1258,85 +1314,232 @@ interface WeeklyAthleteWorkout {
               )}
             </div>
           </div>
-
-          {/* Physical Attributes & Medical Info */}
-          <div className="glass-card p-5 space-y-4">
-            <h3 className="text-sm font-bold text-white flex items-center">
-              <Heart className="h-4 w-4 text-accent mr-2" />
-              Dados Físicos & Clínicos
-            </h3>
-
-            <div className="grid grid-cols-2 gap-4 border-b border-white/5 pb-4">
-              <div className="bg-neutral-dark/40 p-3 rounded-lg border border-white/5 text-center">
-                <span className="block text-[10px] text-gray-400">Altura</span>
-                <span className="text-base font-bold text-white">{studentAthlete.altura ? `${studentAthlete.altura.toFixed(2)} m` : '-'}</span>
-              </div>
-              <div className="bg-neutral-dark/40 p-3 rounded-lg border border-white/5 text-center">
-                <span className="block text-[10px] text-gray-400">Peso</span>
-                <span className="text-base font-bold text-white">{studentAthlete.peso ? `${studentAthlete.peso.toFixed(1)} kg` : '-'}</span>
-              </div>
-            </div>
-
-            <div>
-              <span className="block text-xs font-semibold text-gray-400 mb-1">Meu Histórico Médico</span>
-              <p className="text-xs text-gray-300 leading-relaxed bg-black/20 p-3 rounded-lg border border-white/5">
-                {studentAthlete.historico_medico || 'Nenhum registro clínico cadastrado.'}
-              </p>
-            </div>
-            
-            <div className="grid grid-cols-2 gap-2 text-[10px] text-gray-400 pt-1">
-              <div>
-                <span className="font-semibold text-gray-300">Meu Contato:</span> {studentAthlete.telefone || '-'}
-              </div>
-              <div>
-                <span className="font-semibold text-gray-300">Responsável:</span> {studentAthlete.telefone_responsavel || '-'}
-              </div>
-            </div>
-          </div>
         </div>
 
-        {/* History of Evaluations for Student */}
+        {/* 2. Perfil Físico, Cálculo de IMC & Acompanhamento Quadrimestral (4 Meses) */}
+        {(() => {
+          const studentIMC = calculateIMC(studentAthlete.peso, studentAthlete.altura);
+          const imcCat = getIMCCategory(studentIMC);
+          const nivelInfo = getNivelAtividadeInfo(studentAthlete.nivel_atividade);
+          const quadStatus = checkQuadrimestralStatus(studentAthlete.data_ultima_pesagem);
+          const workoutRec = getWorkoutRecommendation(studentIMC, studentAthlete.nivel_atividade);
+
+          return (
+            <div className="glass-card p-6 space-y-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/5 pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-xl bg-accent/10 border border-accent/20 flex items-center justify-center text-accent">
+                    <Scale className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-base font-bold text-white">
+                        Meu Perfil Físico & Avaliação Quadrimestral
+                      </h3>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary text-accent border border-accent/20 font-bold">
+                        Ciclo de 4 Meses
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      Diagnóstico corporal e adaptação de treino realizada pelo seu treinador a cada 4 meses.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Banner Quadrimestral */}
+              {quadStatus.isDue ? (
+                <div className="rounded-2xl p-4 bg-gradient-to-r from-amber-500/15 via-red-500/10 to-amber-500/15 border border-amber-500/30 flex items-start gap-3 shadow-lg">
+                  <div className="p-2 rounded-xl bg-amber-500/20 text-amber-400 shrink-0 mt-0.5">
+                    <AlertCircle className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-amber-300 flex items-center gap-2">
+                      ⚠️ Hora da Reavaliação Quadrimestral (+4 Meses)
+                    </h4>
+                    <p className="text-xs text-gray-300 mt-1">
+                      {quadStatus.formattedLastDate !== 'Sem registro'
+                        ? `Sua última medição foi em ${quadStatus.formattedLastDate}. Já se passaram 120 dias! Procure seu professor no próximo treino para aferir suas medidas e renovar seu plano de treino.`
+                        : 'Você ainda não possui uma pesagem quadrimestral cadastrada. Fale com seu professor para registrar seu peso e altura!'}
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="rounded-2xl p-4 bg-emerald-500/10 border border-emerald-500/25 flex items-start gap-3">
+                  <div className="p-2 rounded-xl bg-emerald-500/20 text-emerald-400 shrink-0 mt-0.5">
+                    <Check className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-emerald-300 flex items-center gap-2">
+                      Avaliação Quadrimestral em Dia ({quadStatus.daysRemaining} dias restantes)
+                    </h4>
+                    <p className="text-xs text-gray-300 mt-1">
+                      Última medição em <strong className="text-white">{quadStatus.formattedLastDate}</strong>. Próxima reavaliação prevista para <strong className="text-white">{quadStatus.formattedNextDate}</strong>.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Grid Métricas Corporais */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="bg-neutral-dark/40 border border-white/5 rounded-2xl p-4">
+                  <span className="text-xs font-semibold text-gray-400 block mb-1">Peso Atual</span>
+                  <div className="text-2xl font-black text-white">
+                    {studentAthlete.peso ? `${studentAthlete.peso.toFixed(1)}` : '-'}
+                    <span className="text-xs text-gray-400 font-normal ml-1">kg</span>
+                  </div>
+                </div>
+
+                <div className="bg-neutral-dark/40 border border-white/5 rounded-2xl p-4">
+                  <span className="text-xs font-semibold text-gray-400 block mb-1">Altura</span>
+                  <div className="text-2xl font-black text-white">
+                    {studentAthlete.altura ? `${studentAthlete.altura.toFixed(2)}` : '-'}
+                    <span className="text-xs text-gray-400 font-normal ml-1">m</span>
+                  </div>
+                </div>
+
+                <div className="bg-neutral-dark/40 border border-white/5 rounded-2xl p-4">
+                  <span className="text-xs font-semibold text-gray-400 block mb-1">Cálculo de IMC</span>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-2xl font-black text-white">
+                      {studentIMC ? studentIMC.toFixed(1) : '-'}
+                    </span>
+                    {studentIMC && (
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${imcCat.badge} ${imcCat.bg} ${imcCat.border} border`}>
+                        {imcCat.label}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="bg-neutral-dark/40 border border-white/5 rounded-2xl p-4">
+                  <span className="text-xs font-semibold text-gray-400 block mb-1">Condicionamento Físico</span>
+                  <div className="text-sm font-bold text-white mt-1">
+                    {nivelInfo.titulo}
+                  </div>
+                  <span className="text-[10px] text-gray-400">{nivelInfo.sublabel}</span>
+                </div>
+              </div>
+
+              {/* Recomendações e Diretrizes do Treinador */}
+              <div className="p-4 rounded-2xl bg-neutral-dark/60 border border-white/5 space-y-2">
+                <h4 className="text-xs font-bold text-accent uppercase tracking-wider flex items-center gap-1.5">
+                  <Dumbbell className="h-4 w-4" />
+                  Diretrizes de Adaptação do Seu Treino: {workoutRec.titulo}
+                </h4>
+                <p className="text-xs text-gray-300">
+                  <strong className="text-white">Foco Principal:</strong> {workoutRec.focoPrincipal}
+                </p>
+                <ul className="text-xs text-gray-400 space-y-1 list-disc list-inside pt-1">
+                  {workoutRec.diretrizes.slice(0, 3).map((d, i) => (
+                    <li key={i}>{d}</li>
+                  ))}
+                </ul>
+              </div>
+
+              {/* Dados Clínicos & Contato */}
+              <div className="grid sm:grid-cols-2 gap-4 pt-2 border-t border-white/5">
+                <div>
+                  <span className="block text-xs font-semibold text-gray-400 mb-1">Histórico Clínico</span>
+                  <p className="text-xs text-gray-300 bg-black/20 p-3 rounded-lg border border-white/5 leading-relaxed">
+                    {studentAthlete.historico_medico || 'Nenhum registro clínico cadastrado.'}
+                  </p>
+                </div>
+                <div>
+                  <span className="block text-xs font-semibold text-gray-400 mb-1">Contatos Cadastrados</span>
+                  <div className="space-y-1 bg-black/20 p-3 rounded-lg border border-white/5 text-xs text-gray-300">
+                    <p><strong className="text-white">Atleta:</strong> {studentAthlete.telefone || 'Não informado'}</p>
+                    <p><strong className="text-white">Responsável:</strong> {studentAthlete.telefone_responsavel || 'Não informado'}</p>
+                    <p><strong className="text-white">Endereço:</strong> {studentAthlete.endereco || 'Não informado'}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* 3. Minhas Avaliações e Evolução */}
         <div className="glass-card p-5">
           <h3 className="text-sm font-bold text-white mb-4 flex items-center">
             <TrendingUp className="h-4 w-4 text-accent mr-2" />
-            Minhas Avaliações e Evolução Tática
+            Minhas Avaliações e Evolução
           </h3>
           {studentEvaluations.length === 0 ? (
             <p className="text-xs text-gray-500 py-4">Nenhuma avaliação realizada ainda.</p>
           ) : (
             <div className="space-y-4">
-              {studentEvaluations.map((evalItem, index) => (
-                <div key={evalItem.id} className="p-4 bg-neutral-dark/40 rounded-xl border border-white/5 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-accent font-semibold">
-                      Avaliação #{studentEvaluations.length - index}
-                    </span>
-                    <span className="text-[10px] text-gray-400 flex items-center font-mono">
-                      📅 {new Date(evalItem.data_avaliacao + 'T00:00').toLocaleDateString('pt-BR')}
-                    </span>
-                  </div>
-                  
-                  <div className="grid grid-cols-4 gap-2 text-center bg-primary/10 rounded-lg p-2.5">
-                    {[
-                      { label: 'Técnica', val: evalItem.nota_tecnica },
-                      { label: 'Tática', val: evalItem.nota_tatica },
-                      { label: 'Física', val: evalItem.nota_fisica },
-                      { label: 'Comport.', val: evalItem.nota_comportamental },
-                    ].map((metric, i) => (
-                      <div key={i}>
-                        <span className="block text-[9px] text-gray-400">{metric.label}</span>
-                        <span className="text-sm font-bold text-accent">{Number(metric.val).toFixed(1)}</span>
-                      </div>
-                    ))}
-                  </div>
+              {studentEvaluations.map((evalItem, index) => {
+                const itemTotal = evalItem.pontos_total ?? (
+                  (evalItem.resistencia || 3) +
+                  (evalItem.equilibrio || 3) +
+                  (evalItem.flexibilidade || 3) +
+                  (evalItem.coordenacao_motora || 3) +
+                  (evalItem.potencia || 3)
+                );
+                const cat = getPointsCategory(itemTotal);
 
-                  {evalItem.observacoes && (
-                    <p className="text-xs text-gray-300 leading-relaxed bg-black/20 p-3 rounded-lg border border-white/5">
-                      <strong className="text-white">Evolução e Feedback do Professor:</strong> {evalItem.observacoes}
-                    </p>
-                  )}
-                </div>
-              ))}
+                return (
+                  <div key={evalItem.id} className="p-4 bg-neutral-dark/40 rounded-xl border border-white/5 space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-accent font-semibold">
+                          Avaliação #{studentEvaluations.length - index}
+                        </span>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${cat.badgeClass}`}>
+                          {itemTotal} / 25 pts • {cat.label}
+                        </span>
+                      </div>
+                      <span className="text-[10px] text-gray-400 flex items-center font-mono">
+                        📅 {new Date(evalItem.data_avaliacao + 'T00:00').toLocaleDateString('pt-BR')}
+                      </span>
+                    </div>
+
+                    {/* Physical capabilities row */}
+                    <div className="grid grid-cols-5 gap-2 text-center bg-white/[0.02] border border-white/5 rounded-lg p-2">
+                      <div>
+                        <span className="block text-[9px] text-gray-400">🫁 Resistência</span>
+                        <span className="text-xs font-bold text-white">{evalItem.resistencia ?? '-'}</span>
+                      </div>
+                      <div>
+                        <span className="block text-[9px] text-gray-400">⚖️ Equilíbrio</span>
+                        <span className="text-xs font-bold text-white">{evalItem.equilibrio ?? '-'}</span>
+                      </div>
+                      <div>
+                        <span className="block text-[9px] text-gray-400">🤸 Flexibilidade</span>
+                        <span className="text-xs font-bold text-white">{evalItem.flexibilidade ?? '-'}</span>
+                      </div>
+                      <div>
+                        <span className="block text-[9px] text-gray-400">🎯 Coordenação</span>
+                        <span className="text-xs font-bold text-white">{evalItem.coordenacao_motora ?? '-'}</span>
+                      </div>
+                      <div>
+                        <span className="block text-[9px] text-gray-400">🦵 Potência</span>
+                        <span className="text-xs font-bold text-white">{evalItem.potencia ?? '-'}</span>
+                      </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-4 gap-2 text-center bg-primary/10 rounded-lg p-2">
+                      {[
+                        { label: 'Técnica', val: evalItem.nota_tecnica },
+                        { label: 'Tática', val: evalItem.nota_tatica },
+                        { label: 'Física', val: evalItem.nota_fisica },
+                        { label: 'Comport.', val: evalItem.nota_comportamental },
+                      ].map((metric, i) => (
+                        <div key={i}>
+                          <span className="block text-[9px] text-gray-400">{metric.label}</span>
+                          <span className="text-xs font-bold text-accent">{Number(metric.val).toFixed(1)}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    {evalItem.observacoes && (
+                      <p className="text-xs text-gray-300 leading-relaxed bg-black/20 p-3 rounded-lg border border-white/5">
+                        <strong className="text-white">Evolução e Feedback do Professor:</strong> {evalItem.observacoes}
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
