@@ -68,21 +68,44 @@ export interface IMCCategoryInfo {
 }
 
 /**
+ * Normaliza altura para metros com 2 casas decimais.
+ * Se o usuário digitar em centímetros (ex: 155 ou 175), converte automaticamente para metros (1.55 ou 1.75).
+ * Suporta string (com vírgula ou ponto) ou número.
+ */
+export function normalizeAltura(altura?: number | string | null): number | null {
+  if (altura === null || altura === undefined || altura === '') return null;
+  const num = typeof altura === 'string' ? parseFloat(altura.replace(',', '.')) : Number(altura);
+  if (isNaN(num) || num <= 0) return null;
+  const inMeters = num > 3 ? num / 100 : num;
+  return Number(inMeters.toFixed(2));
+}
+
+/**
+ * Normaliza peso para kg com até 2 casas decimais.
+ * Suporta string (com vírgula ou ponto) ou número.
+ */
+export function normalizePeso(peso?: number | string | null): number | null {
+  if (peso === null || peso === undefined || peso === '') return null;
+  const num = typeof peso === 'string' ? parseFloat(peso.replace(',', '.')) : Number(peso);
+  if (isNaN(num) || num <= 0) return null;
+  return Number(num.toFixed(2));
+}
+
+/**
  * Calcula o IMC (Índice de Massa Corporal)
  * Peso em kg e Altura em metros (aceita também em cm se > 3)
  */
 export function calculateIMC(pesoKg?: number | null, alturaM?: number | null): number | null {
-  if (!pesoKg || !alturaM || pesoKg <= 0 || alturaM <= 0) return null;
+  const p = normalizePeso(pesoKg);
+  const h = normalizeAltura(alturaM);
+  if (!p || !h || h <= 0) return null;
 
-  // Se a altura foi digitada em cm (ex: 175 em vez de 1.75), converte para metros
-  const h = alturaM > 3 ? alturaM / 100 : alturaM;
-  if (h <= 0) return null;
-
-  const imc = pesoKg / (h * h);
+  const imc = p / (h * h);
   if (!isFinite(imc) || isNaN(imc)) return null;
 
   return Math.round(imc * 10) / 10;
 }
+
 
 /**
  * Retorna a classificação médica do IMC

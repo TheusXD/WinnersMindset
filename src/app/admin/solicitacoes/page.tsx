@@ -13,7 +13,9 @@ import {
   calculateIMC, 
   getIMCCategory, 
   getNivelAtividadeInfo, 
-  getWorkoutRecommendation 
+  getWorkoutRecommendation,
+  normalizeAltura,
+  normalizePeso,
 } from '@/lib/imc';
 import PhysicalScoreCards, {
   PhysicalScores,
@@ -140,8 +142,8 @@ export default function AdminSolicitacoesPage() {
             rg: selectedReq.rg,
             nome_pai: selectedReq.nome_pai,
             nome_mae: selectedReq.nome_mae,
-            peso: selectedReq.peso || null,
-            altura: selectedReq.altura || null,
+            peso: normalizePeso(selectedReq.peso),
+            altura: normalizeAltura(selectedReq.altura),
             nivel_atividade: selectedReq.nivel_atividade || 1,
             data_ultima_pesagem: todayIso,
           })
@@ -152,14 +154,16 @@ export default function AdminSolicitacoesPage() {
         athleteId = createdAthlete?.id;
 
         // 2.1 Salvar medição inicial no historico_corporal
-        if (athleteId && selectedReq.peso && selectedReq.altura) {
-          const imc = calculateIMC(selectedReq.peso, selectedReq.altura);
+        const normPeso = normalizePeso(selectedReq.peso);
+        const normAltura = normalizeAltura(selectedReq.altura);
+        if (athleteId && normPeso && normAltura) {
+          const imc = calculateIMC(normPeso, normAltura);
           await supabase
             .from('historico_corporal')
             .insert({
               atleta_id: athleteId,
-              peso: selectedReq.peso,
-              altura: selectedReq.altura,
+              peso: normPeso,
+              altura: normAltura,
               imc: imc || 0,
               nivel_atividade: selectedReq.nivel_atividade || 1,
               data_medicao: todayIso,

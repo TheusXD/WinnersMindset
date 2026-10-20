@@ -17,7 +17,9 @@ import {
   NIVEIS_ATIVIDADE, 
   calculateIMC, 
   getIMCCategory, 
-  getNivelAtividadeInfo 
+  getNivelAtividadeInfo,
+  normalizeAltura,
+  normalizePeso,
 } from '@/lib/imc';
 
 type Step = 1 | 2 | 3 | 4 | 5; // Step 5 is success screen
@@ -102,13 +104,19 @@ export default function CadastroPage() {
   };
 
   const validateStep3 = () => {
-    if (peso && (isNaN(parseFloat(peso.replace(',', '.'))) || parseFloat(peso.replace(',', '.')) <= 0)) {
-      setError('Por favor, informe um peso válido (ex: 68.5).');
-      return false;
+    if (peso) {
+      const p = normalizePeso(peso);
+      if (!p || p < 15 || p > 300) {
+        setError('Por favor, informe um peso válido em kg (ex: 68.5).');
+        return false;
+      }
     }
-    if (altura && (isNaN(parseFloat(altura.replace(',', '.'))) || parseFloat(altura.replace(',', '.')) <= 0)) {
-      setError('Por favor, informe uma altura válida (ex: 1.75).');
-      return false;
+    if (altura) {
+      const a = normalizeAltura(altura);
+      if (!a || a < 0.5 || a > 2.6) {
+        setError('Por favor, informe uma altura válida (ex: 1.75 ou 175).');
+        return false;
+      }
     }
     setError(null);
     return true;
@@ -126,8 +134,8 @@ export default function CadastroPage() {
   };
 
   // IMC Calculation live
-  const parsedPeso = peso ? parseFloat(peso.replace(',', '.')) : null;
-  const parsedAltura = altura ? parseFloat(altura.replace(',', '.')) : null;
+  const parsedPeso = normalizePeso(peso);
+  const parsedAltura = normalizeAltura(altura);
   const imcCalculado = calculateIMC(parsedPeso, parsedAltura);
   const imcInfo = getIMCCategory(imcCalculado);
 
@@ -391,7 +399,7 @@ export default function CadastroPage() {
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-semibold text-gray-400 mb-1">Altura (m)</label>
+                <label className="block text-xs font-semibold text-gray-400 mb-1">Altura (m ou cm)</label>
                 <div className="relative">
                   <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-400"><Ruler className="h-4 w-4" /></span>
                   <input
@@ -400,7 +408,7 @@ export default function CadastroPage() {
                     value={altura}
                     onChange={(e) => setAltura(e.target.value)}
                     className="w-full pl-9 glass-input text-sm"
-                    placeholder="Ex: 1.75"
+                    placeholder="Ex: 1.75 ou 175"
                   />
                 </div>
               </div>
@@ -487,7 +495,7 @@ export default function CadastroPage() {
               <div>
                 <span className="text-gray-400 block text-[10px]">Perfil Físico Cadastrado:</span>
                 <span className="font-bold text-white">
-                  {peso ? `${peso} kg` : '-'} | {altura ? `${altura} m` : '-'} ({nivelInfo.label})
+                  {parsedPeso ? `${parsedPeso} kg` : '-'} | {parsedAltura ? `${parsedAltura.toFixed(2)} m` : '-'} ({nivelInfo.label})
                 </span>
               </div>
               {imcCalculado && (

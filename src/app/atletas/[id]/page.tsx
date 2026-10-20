@@ -61,7 +61,9 @@ import {
   getIMCCategory,
   getNivelAtividadeInfo,
   getWorkoutRecommendation,
-  checkQuadrimestralStatus
+  checkQuadrimestralStatus,
+  normalizeAltura,
+  normalizePeso
 } from '@/lib/imc';
 
 import PhysicalScoreCards, {
@@ -373,10 +375,10 @@ export default function AthleteDetailPage() {
   const handleSaveMedicao = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!athlete) return;
-    const p = parseFloat(medicaoPeso.replace(',', '.'));
-    const a = parseFloat(medicaoAltura.replace(',', '.'));
+    const p = normalizePeso(medicaoPeso);
+    const a = normalizeAltura(medicaoAltura);
 
-    if (isNaN(p) || p <= 0 || isNaN(a) || a <= 0) {
+    if (!p || !a) {
       alert('Por favor, informe peso e altura válidos.');
       return;
     }
@@ -384,12 +386,11 @@ export default function AthleteDetailPage() {
     setSavingMedicao(true);
     const imc = calculateIMC(p, a);
     const today = todayLocalISODate();
-    const normalizedAltura = a > 3 ? a / 100 : a;
 
     const payload = {
       atleta_id: athlete.id,
       peso: p,
-      altura: normalizedAltura,
+      altura: a,
       imc: imc || 0,
       nivel_atividade: medicaoNivel,
       data_medicao: today,
@@ -1046,8 +1047,8 @@ export default function AthleteDetailPage() {
       data_nascimento: editAthlete.data_nascimento,
       categoria: editAthlete.categoria,
       posicao: editAthlete.posicao,
-      peso: editAthlete.peso ? parseFloat(editAthlete.peso) : null,
-      altura: editAthlete.altura ? parseFloat(editAthlete.altura) : null,
+      peso: normalizePeso(editAthlete.peso),
+      altura: normalizeAltura(editAthlete.altura),
       status: editAthlete.status as 'ativo' | 'lesionado' | 'inativo',
       foto_url: editAthlete.foto_url || null,
       telefone: editAthlete.telefone || null,

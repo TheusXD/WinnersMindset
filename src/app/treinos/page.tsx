@@ -6,6 +6,7 @@ import { Calendar, Plus, MapPin, Users, CheckCircle, XCircle, AlertCircle, Save,
 import { useAuth } from '@/lib/auth-context';
 import { todayLocalISODate } from '@/lib/date';
 import { getSafeYoutubeEmbedUrl } from '@/lib/youtube';
+import { normalizePeso, normalizeAltura } from '@/lib/imc';
 
 interface Training {
   id: string;
@@ -188,12 +189,15 @@ export default function TrainingsPage() {
     if (!activeEvolutionAthlete) return;
 
     try {
+      const normPeso = normalizePeso(evolutionData.peso);
+      const normAltura = normalizeAltura(evolutionData.altura);
+
       // 1. Update weight & height
       const { error: athleteError } = await supabase
         .from('atletas')
         .update({
-          peso: evolutionData.peso ? parseFloat(evolutionData.peso) : null,
-          altura: evolutionData.altura ? parseFloat(evolutionData.altura) : null,
+          peso: normPeso,
+          altura: normAltura,
         })
         .eq('id', activeEvolutionAthlete.id);
 
@@ -217,13 +221,15 @@ export default function TrainingsPage() {
     } catch (err) {
       console.error('Erro ao registrar evolução no Supabase. Efetuando localmente:', err);
       // Fallback local
+      const normPeso = normalizePeso(evolutionData.peso);
+      const normAltura = normalizeAltura(evolutionData.altura);
       setAthletes(prev =>
         prev.map(a =>
           a.id === activeEvolutionAthlete.id
             ? { 
                 ...a, 
-                peso: evolutionData.peso ? parseFloat(evolutionData.peso) : null, 
-                altura: evolutionData.altura ? parseFloat(evolutionData.altura) : null 
+                peso: normPeso, 
+                altura: normAltura 
               }
             : a
         )

@@ -7,6 +7,7 @@ import {
   signToken, 
   getSessionUser 
 } from '@/lib/auth-server';
+import { normalizePeso, normalizeAltura } from '@/lib/imc';
 
 const ADMIN_EMAILS = [
   'admin@legionarios.com',
@@ -191,8 +192,8 @@ export async function POST(
 
       // 3. Create registration request
       const solicitacaoId = crypto.randomUUID();
-      const parsedPeso = peso ? parseFloat(peso) : null;
-      const parsedAltura = altura ? parseFloat(altura) : null;
+      const parsedPeso = normalizePeso(peso);
+      const parsedAltura = normalizeAltura(altura);
       const parsedNivel = nivel_atividade ? parseInt(nivel_atividade, 10) : 1;
 
       const parsedResistencia = resistencia ? parseInt(resistencia, 10) : 3;
